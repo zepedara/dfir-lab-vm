@@ -212,7 +212,8 @@ $packerDir = Join-Path $KitDir 'packer'
 Push-Location $packerDir
 try {
     Write-Step 'Initialising Packer plugins (vmware)'
-    packer init . 2>&1 | ForEach-Object { Write-Host "    $_" }
+    packer init .
+    if ($LASTEXITCODE -ne 0) { Die 'packer init failed (could not install the vmware plugin). Check network/proxy and re-run.' }
 
     Write-Step 'Validating the template'
     $varArgs = @()
@@ -230,7 +231,7 @@ try {
 
     Write-Step 'Building the VM (this takes ~30-60 min: ISO download, Windows install, lab provisioning)'
     Write-Warn2 'A VMware window will appear and drive the install hands-free. Do not touch it.'
-    & packer build -on-error=ask @varArgs .
+    & packer build -on-error=cleanup @varArgs .
     if ($LASTEXITCODE -ne 0) { Die 'packer build failed - see messages above. Re-run the one-liner to resume; it is idempotent.' }
 
     $out = Get-ChildItem -Path (Join-Path $packerDir 'output-dfir-lab-vm') -Filter *.vmx -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
