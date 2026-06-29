@@ -14,7 +14,8 @@ $EZ        = Join-Path $Root 'EZ'
 $ChainsawD = Join-Path $Root 'chainsaw'
 $HayabusaD = Join-Path $Root 'hayabusa'
 $Sysint    = Join-Path $Root 'sysinternals'
-New-Item -ItemType Directory -Force -Path $Root,$EZ,$ChainsawD,$HayabusaD,$Sysint | Out-Null
+$DotNet    = Join-Path $Root 'dotnet'
+New-Item -ItemType Directory -Force -Path $Root,$EZ,$ChainsawD,$HayabusaD,$Sysint,$DotNet | Out-Null
 
 function Get-LatestRelease($ownerRepo, $assetPattern) {
     # Return the browser_download_url of the first asset matching the regex.
@@ -31,12 +32,33 @@ function Expand-To($url, $dest) {
     Remove-Item $zip -Force
 }
 
+# ------------------------------- .NET 9 runtime -----------------------------
+# The EZ tools fetched below with -NetVersion 9 are FRAMEWORK-DEPENDENT .NET 9
+# builds (NOT self-contained) - PECmd/EvtxECmd/AppCompatCacheParser etc. will
+# fail at launch ("You must install or update .NET... Microsoft.NETCore.App
+# 9.0.0") unless the .NET 9 runtime is present. A fresh Windows VM has none, so
+# we bake the .NET 9 Desktop Runtime (superset: includes NETCore.App + the
+# WindowsDesktop libs the EZ GUI tools need) into C:\dfir\tools\dotnet now.
+Write-Host '[dotnet] Installing the .NET 9 Desktop Runtime (required by the EZ tools)...'
+try {
+    $dgi = Join-Path $env:TEMP 'dotnet-install.ps1'
+    Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile $dgi -UseBasicParsing
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $dgi -Runtime windowsdesktop -Channel 9.0 -InstallDir $DotNet -NoPath
+    # Make the private runtime discoverable by the EZ apphost .exes (machine-wide).
+    [Environment]::SetEnvironmentVariable('DOTNET_ROOT', $DotNet, 'Machine')
+    $env:DOTNET_ROOT = $DotNet
+    Write-Host "[dotnet] .NET 9 runtime installed under $DotNet"
+} catch {
+    Write-Warning "[dotnet] .NET 9 runtime install failed: $($_.Exception.Message). EZ tools will not run until a .NET 9 runtime is installed."
+}
+
 # ----------------------------- Eric Zimmerman -------------------------------
 Write-Host '[ez] Installing Eric Zimmerman tools via Get-ZimmermanTools.ps1...'
 try {
     $gzt = Join-Path $env:TEMP 'Get-ZimmermanTools.ps1'
     Invoke-WebRequest 'https://raw.githubusercontent.com/EricZimmerman/Get-ZimmermanTools/master/Get-ZimmermanTools.ps1' -OutFile $gzt -UseBasicParsing
-    # -NetVersion 9 pulls the .NET 9 self-contained builds (no separate runtime needed).
+    # -NetVersion 9 pulls the framework-dependent .NET 9 builds (need the runtime
+    # installed above). They are smaller than self-contained builds but require it.
     & powershell -NoProfile -ExecutionPolicy Bypass -File $gzt -Dest $EZ -NetVersion 9
     Write-Host "[ez] EZ tools installed under $EZ"
 
@@ -75,9 +97,16 @@ try {
 # --------------------------------- Hayabusa ---------------------------------
 Write-Host '[hayabusa] Installing Hayabusa (Windows build)...'
 try {
-    $url = Get-LatestRelease 'Yamato-Security/hayabusa' 'hayabusa.*win.*\.zip$'
+    # Hayabusa ships several Windows zips (win-x64, win-arm64/aarch64, win-x86,
+    # plus *-live-response variants). The loose pattern 'hayabusa.*win.*\.zip$'
+    # matched the *arm64 live-response* asset first -> an ARM64 binary that won't
+    # run on the x64 VM ("not a valid application for this OS platform"). Pin x64.
+    $url = Get-LatestRelease 'Yamato-Security/hayabusa' 'hayabusa-.*-win-x64\.zip$'
     Expand-To $url $HayabusaD
-    $exe = Get-ChildItem $HayabusaD -Recurse -Filter 'hayabusa*.exe' | Select-Object -First 1
+    # Pick the x64 exe explicitly in case multiple arch exes are present.
+    $exe = Get-ChildItem $HayabusaD -Recurse -Filter 'hayabusa*.exe' |
+           Where-Object { $_.Name -match 'x64' } | Select-Object -First 1
+    if (-not $exe) { $exe = Get-ChildItem $HayabusaD -Recurse -Filter 'hayabusa*.exe' | Select-Object -First 1 }
     if ($exe) { Copy-Item $exe.FullName (Join-Path $HayabusaD 'hayabusa.exe') -Force }
     # AIR-GAP: download the rules NOW (build time) into rules\ so timeline/detect
     # works offline. update-rules clones the hayabusa-rules repo locally.
@@ -101,7 +130,7 @@ try {
 Write-Host '[path] Adding tools to the machine PATH...'
 $ezBin = (Get-ChildItem $EZ -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'net9|net6' } | Select-Object -First 1)
 $ezPath = if ($ezBin) { $ezBin.FullName } else { $EZ }
-$paths = @($ezPath, $ChainsawD, $HayabusaD, $Sysint)
+$paths = @($ezPath, $ChainsawD, $HayabusaD, $Sysint, $DotNet)
 $cur = [Environment]::GetEnvironmentVariable('PATH','Machine')
 foreach ($p in $paths) {
     if ($cur -notlike "*$p*") { $cur = "$cur;$p" }
