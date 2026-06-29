@@ -32,7 +32,7 @@
       $env:DFIR_ISO_URL    = '<eval iso url>'  # override the eval ISO URL
       $env:DFIR_ISO_SHA256 = '<sha256>'        # checksum for the above
 #>
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'  # native tools (git/packer) write progress to stderr; Stop would treat that as fatal
 Set-StrictMode -Version 1
 
 # ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ $repoUrl = "https://github.com/$RepoOwner/$RepoName.git"
 
 if (Test-Path (Join-Path $KitDir '.git')) {
     Write-Warn2 'Kit already cloned - updating (git pull)'
-    git -C $KitDir pull --ff-only 2>$null
+    cmd /c "git -C `"$KitDir`" pull --ff-only" 1>$null 2>$null
 } elseif (Get-Command git -ErrorAction SilentlyContinue) {
     git clone --branch $Branch --depth 1 $repoUrl $KitDir
 } else {
