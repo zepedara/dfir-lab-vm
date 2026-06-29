@@ -1,13 +1,23 @@
 # =============================================================================
 # 30 - Install the Windows-native DFIR tools the lab uses:
-#       * Eric Zimmerman's tools (via Get-ZimmermanTools.ps1)
-#       * Chainsaw (Windows build)
-#       * Hayabusa (Windows build)
+#       * Eric Zimmerman's tools (.NET 9 builds)
+#       * Chainsaw (Windows build + bundled Sigma rules/mappings)
+#       * Hayabusa (Windows x64 build + rules)
 #       * Sysinternals (Sysmon etc., handy for module 10)
 # All land under C:\dfir\tools and get put on the machine PATH.
+#
+# OFFLINE-FIRST: EZ tools / Chainsaw / Hayabusa are pulled from the VENDORED
+# GitHub release  zepedara/dfir-lab-vm @ deps-v1  (so a locked-down / DoD network
+# never has to reach hashicorp / ericzimmerman / WithSecureLabs / Yamato-Security).
+# Each tool falls back to its original upstream URL ONLY if the vendored fetch
+# fails. The bits are baked into the image at build time so the built VM is fully
+# offline. PowerShell 5.1-safe (no ?? / ternary / ?.); throw not exit on hard fail.
 # =============================================================================
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# Vendored dependency release (tokenless public assets).
+$DepsBase  = 'https://github.com/zepedara/dfir-lab-vm/releases/download/deps-v1'
 
 $Root      = 'C:\dfir\tools'
 $EZ        = Join-Path $Root 'EZ'
@@ -29,16 +39,31 @@ function Expand-To($url, $dest) {
     $zip = Join-Path $env:TEMP ([IO.Path]::GetFileName($url))
     Invoke-WebRequest $url -OutFile $zip -UseBasicParsing
     Expand-Archive $zip -DestinationPath $dest -Force
-    Remove-Item $zip -Force
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+}
+# Download a single VENDORED asset from the deps-v1 release into $dest and extract.
+# Returns $true on success, $false on failure (so caller can fall back upstream).
+function Get-Vendored($assetName, $dest) {
+    try {
+        $u   = "$DepsBase/$assetName"
+        $zip = Join-Path $env:TEMP $assetName
+        Invoke-WebRequest $u -OutFile $zip -UseBasicParsing
+        Expand-Archive $zip -DestinationPath $dest -Force
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        return $true
+    } catch {
+        Write-Warning "[vendor] fetch of $assetName from deps-v1 failed: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 # ------------------------------- .NET 9 runtime -----------------------------
-# The EZ tools fetched below with -NetVersion 9 are FRAMEWORK-DEPENDENT .NET 9
-# builds (NOT self-contained) - PECmd/EvtxECmd/AppCompatCacheParser etc. will
-# fail at launch ("You must install or update .NET... Microsoft.NETCore.App
-# 9.0.0") unless the .NET 9 runtime is present. A fresh Windows VM has none, so
-# we bake the .NET 9 Desktop Runtime (superset: includes NETCore.App + the
-# WindowsDesktop libs the EZ GUI tools need) into C:\dfir\tools\dotnet now.
+# The EZ tools are FRAMEWORK-DEPENDENT .NET 9 builds (NOT self-contained) -
+# PECmd/EvtxECmd/AppCompatCacheParser etc. will fail at launch ("You must install
+# or update .NET... Microsoft.NETCore.App 9.0.0") unless the .NET 9 runtime is
+# present. A fresh Windows VM has none, so we bake the .NET 9 Desktop Runtime
+# (superset: includes NETCore.App + the WindowsDesktop libs the EZ GUI tools need)
+# into C:\dfir\tools\dotnet now. (Microsoft host - kept as-is per the build fix.)
 Write-Host '[dotnet] Installing the .NET 9 Desktop Runtime (required by the EZ tools)...'
 try {
     $dgi = Join-Path $env:TEMP 'dotnet-install.ps1'
@@ -53,18 +78,30 @@ try {
 }
 
 # ----------------------------- Eric Zimmerman -------------------------------
-Write-Host '[ez] Installing Eric Zimmerman tools via Get-ZimmermanTools.ps1...'
-try {
-    $gzt = Join-Path $env:TEMP 'Get-ZimmermanTools.ps1'
-    Invoke-WebRequest 'https://raw.githubusercontent.com/EricZimmerman/Get-ZimmermanTools/master/Get-ZimmermanTools.ps1' -OutFile $gzt -UseBasicParsing
-    # -NetVersion 9 pulls the framework-dependent .NET 9 builds (need the runtime
-    # installed above). They are smaller than self-contained builds but require it.
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $gzt -Dest $EZ -NetVersion 9
-    Write-Host "[ez] EZ tools installed under $EZ"
-
+# Vendored EZTools.zip extracts a net9\ tree (PECmd, EvtxECmd, AppCompatCacheParser,
+# AmcacheParser, MFTECmd, RECmd, SBECmd, RBCmd, LECmd, JLECmd, SrumECmd, SQLECmd)
+# with EvtxeCmd\Maps, RECmd\BatchExamples and SQLECmd\Maps already baked in.
+Write-Host '[ez] Installing Eric Zimmerman tools (vendored EZTools.zip -> deps-v1)...'
+$gotEz = Get-Vendored 'EZTools.zip' $EZ
+if ($gotEz) {
+    Write-Host "[ez] EZ tools installed from vendored deps-v1 release under $EZ"
+} else {
+    Write-Warning '[ez] Falling back to upstream Get-ZimmermanTools.ps1...'
+    try {
+        $gzt = Join-Path $env:TEMP 'Get-ZimmermanTools.ps1'
+        Invoke-WebRequest 'https://raw.githubusercontent.com/EricZimmerman/Get-ZimmermanTools/master/Get-ZimmermanTools.ps1' -OutFile $gzt -UseBasicParsing
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $gzt -Dest $EZ -NetVersion 9
+        $gotEz = $true
+        Write-Host "[ez] EZ tools installed (upstream fallback) under $EZ"
+    } catch {
+        Write-Warning "[ez] Get-ZimmermanTools fallback failed: $($_.Exception.Message). EZ tools can be installed later from the desktop README."
+    }
+}
+if ($gotEz) {
     # AIR-GAP: bake the maps/definitions locally so tools never fetch at runtime.
-    # EvtxECmd needs Maps\, RECmd needs BatchExamples\, SQLECmd needs Maps\. Their
-    # --sync downloads those packs now (build time) so the VM is offline-ready.
+    # EvtxECmd needs Maps\, RECmd needs BatchExamples\, SQLECmd needs Maps\. The
+    # vendored zip already contains them; --sync just refreshes if online (noop
+    # offline). Wrapped so a blocked network never fails the build.
     foreach ($t in @('EvtxECmd','RECmd','SQLECmd')) {
         $tExe = Get-ChildItem $EZ -Recurse -Filter "$t.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($tExe) {
@@ -72,19 +109,21 @@ try {
             try { & $tExe.FullName --sync 2>$null } catch { Write-Warning "[ez] $t --sync failed: $($_.Exception.Message)" }
         }
     }
-} catch {
-    Write-Warning "[ez] Get-ZimmermanTools failed: $($_.Exception.Message). EZ tools can be installed later from the desktop README."
 }
 
 # --------------------------------- Chainsaw ---------------------------------
-# AIR-GAP: grab the "+rules" asset so the Sigma rules + event mappings are baked
-# in. We KEEP the whole extracted tree (sigma\, mappings\, rules\) - never delete
-# it - so offline `chainsaw hunt ... -s <sigma> --mapping <mappings>` works.
-Write-Host '[chainsaw] Installing Chainsaw (Windows build + bundled Sigma rules)...'
+# Vendored chainsaw_all_platforms+rules.zip extracts chainsaw\ with the Windows
+# x64 exe (chainsaw_x86_64-pc-windows-msvc.exe) PLUS sigma\, mappings\, rules\.
+# We KEEP the whole tree so offline `chainsaw hunt ... -s <sigma> --mapping <map>` works.
+Write-Host '[chainsaw] Installing Chainsaw (vendored: Windows build + bundled Sigma rules)...'
 try {
-    try   { $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms\+rules\.zip$' }
-    catch { $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms.*\.zip$' }
-    Expand-To $url $ChainsawD
+    $gotCs = Get-Vendored 'chainsaw_all_platforms+rules.zip' $ChainsawD
+    if (-not $gotCs) {
+        Write-Warning '[chainsaw] Falling back to upstream WithSecureLabs/chainsaw latest...'
+        try   { $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms\+rules\.zip$' }
+        catch { $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms.*\.zip$' }
+        Expand-To $url $ChainsawD
+    }
     $exe = Get-ChildItem $ChainsawD -Recurse -Filter '*windows*.exe' | Select-Object -First 1
     if ($exe) { Copy-Item $exe.FullName (Join-Path $ChainsawD 'chainsaw.exe') -Force }
     $sigma = Get-ChildItem $ChainsawD -Recurse -Directory -Filter 'sigma' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -95,21 +134,24 @@ try {
 }
 
 # --------------------------------- Hayabusa ---------------------------------
-Write-Host '[hayabusa] Installing Hayabusa (Windows build)...'
+# Vendored hayabusa-3.9.0-win-x64.zip is the x64 Windows build WITH rules\ baked
+# in. (A prior bug grabbed the arm64 live-response asset -> "not a valid
+# application for this OS platform"; the vendored zip is pinned x64.)
+Write-Host '[hayabusa] Installing Hayabusa (vendored: Windows x64 build + rules)...'
 try {
-    # Hayabusa ships several Windows zips (win-x64, win-arm64/aarch64, win-x86,
-    # plus *-live-response variants). The loose pattern 'hayabusa.*win.*\.zip$'
-    # matched the *arm64 live-response* asset first -> an ARM64 binary that won't
-    # run on the x64 VM ("not a valid application for this OS platform"). Pin x64.
-    $url = Get-LatestRelease 'Yamato-Security/hayabusa' 'hayabusa-.*-win-x64\.zip$'
-    Expand-To $url $HayabusaD
+    $gotHb = Get-Vendored 'hayabusa-3.9.0-win-x64.zip' $HayabusaD
+    if (-not $gotHb) {
+        Write-Warning '[hayabusa] Falling back to upstream Yamato-Security/hayabusa latest (win-x64)...'
+        $url = Get-LatestRelease 'Yamato-Security/hayabusa' 'hayabusa-.*-win-x64\.zip$'
+        Expand-To $url $HayabusaD
+    }
     # Pick the x64 exe explicitly in case multiple arch exes are present.
     $exe = Get-ChildItem $HayabusaD -Recurse -Filter 'hayabusa*.exe' |
            Where-Object { $_.Name -match 'x64' } | Select-Object -First 1
     if (-not $exe) { $exe = Get-ChildItem $HayabusaD -Recurse -Filter 'hayabusa*.exe' | Select-Object -First 1 }
     if ($exe) { Copy-Item $exe.FullName (Join-Path $HayabusaD 'hayabusa.exe') -Force }
-    # AIR-GAP: download the rules NOW (build time) into rules\ so timeline/detect
-    # works offline. update-rules clones the hayabusa-rules repo locally.
+    # Rules are already baked in the vendored zip. update-rules just refreshes if
+    # online; noop/!fail offline. Wrapped so a blocked network never fails build.
     try { Push-Location $HayabusaD; & (Join-Path $HayabusaD 'hayabusa.exe') update-rules 2>$null; Pop-Location } catch {}
     $hrules = Get-ChildItem $HayabusaD -Recurse -Directory -Filter 'rules' -ErrorAction SilentlyContinue | Select-Object -First 1
     Write-Host "[hayabusa] Installed. Rules baked: $([bool]$hrules)"
@@ -118,6 +160,8 @@ try {
 }
 
 # ------------------------------- Sysinternals -------------------------------
+# Microsoft host (download.sysinternals.com). Not vendored - it is a Microsoft
+# property, like the .NET runtime and the Windows ISO. Non-fatal if blocked.
 Write-Host '[sysinternals] Installing Sysinternals (Sysmon, Autoruns, etc.)...'
 try {
     Expand-To 'https://download.sysinternals.com/files/SysinternalsSuite.zip' $Sysint
@@ -127,13 +171,19 @@ try {
 }
 
 # ------------------------- Put everything on PATH ---------------------------
+# EZ layout has flat tools (PECmd.exe at net9\) AND subfolder tools (EvtxeCmd\,
+# RECmd\, SQLECmd\). Add EVERY directory that directly holds an EZ .exe so all
+# tools resolve on PATH, then the other tool roots.
 Write-Host '[path] Adding tools to the machine PATH...'
-$ezBin = (Get-ChildItem $EZ -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'net9|net6' } | Select-Object -First 1)
-$ezPath = if ($ezBin) { $ezBin.FullName } else { $EZ }
-$paths = @($ezPath, $ChainsawD, $HayabusaD, $Sysint, $DotNet)
+$ezExeDirs = @(Get-ChildItem $EZ -Recurse -Filter '*.exe' -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.DirectoryName } | Sort-Object -Unique)
+if (-not $ezExeDirs -or $ezExeDirs.Count -eq 0) { $ezExeDirs = @($EZ) }
+$paths = @()
+$paths += $ezExeDirs
+$paths += @($ChainsawD, $HayabusaD, $Sysint, $DotNet)
 $cur = [Environment]::GetEnvironmentVariable('PATH','Machine')
 foreach ($p in $paths) {
-    if ($cur -notlike "*$p*") { $cur = "$cur;$p" }
+    if ($p -and ($cur -notlike "*$p*")) { $cur = "$cur;$p" }
 }
 [Environment]::SetEnvironmentVariable('PATH', $cur, 'Machine')
 Write-Host '[path] Done. New shells will see PECmd, EvtxECmd, chainsaw, hayabusa, sysmon, etc.'

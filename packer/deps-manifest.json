@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "release_tag": "deps-v1",
+  "repo": "zepedara/dfir-lab-vm",
+  "base_url": "https://github.com/zepedara/dfir-lab-vm/releases/download/deps-v1",
+  "generated": "2026-06-29",
+  "note": "Vendored offline dependencies for the DFIR lab VM. ISO is NOT vendored (MS licence). Download any asset tokenless from base_url/<filename>.",
+  "assets": {
+    "packer": {
+      "filename": "packer_1.11.2_windows_amd64.zip",
+      "version": "1.11.2",
+      "size": 15850982,
+      "sha256": "43facee0f16a03c26bbb713c6904b39568ae320d02b875fe18436e93068a712e",
+      "source_url": "https://releases.hashicorp.com/packer/1.11.2/packer_1.11.2_windows_amd64.zip"
+    },
+    "packer_plugin_vmware": {
+      "filename": "packer-plugin-vmware_v1.0.11_x5.0_windows_amd64.zip",
+      "version": "1.0.11",
+      "size": 11601185,
+      "sha256": "3d5536da4a81fbbb2dd2d9f4712094c902ad7f9fdbbba7718f874cc63addc051",
+      "source_url": "https://github.com/vmware/packer-plugin-vmware/releases/download/v1.0.11/packer-plugin-vmware_v1.0.11_x5.0_windows_amd64.zip",
+      "plugin_source": "github.com/hashicorp/vmware"
+    },
+    "ez_tools": {
+      "filename": "EZTools.zip",
+      "version": "net9-2026-06-29",
+      "size": 38840889,
+      "sha256": "5578a2ade2206cb436a1b9273ba7bc22f73d7c75dde0fc8fa92115e2c2d6c680",
+      "source_url": "https://download.ericzimmermanstools.com/net9/<tool>.zip",
+      "layout": "extracts to net9/ ; contains PECmd EvtxECmd AppCompatCacheParser AmcacheParser MFTECmd RECmd SBECmd RBCmd LECmd JLECmd SrumECmd (+SQLECmd); EvtxeCmd/Maps RECmd/BatchExamples SQLECmd/Maps baked in"
+    },
+    "chainsaw": {
+      "filename": "chainsaw_all_platforms+rules.zip",
+      "version": "2.16.0",
+      "size": 35404607,
+      "sha256": "9c6633fa5f3dffaed780ea5320a6fdd0f1e9b21b47dd4894f32d9a58347a7495",
+      "source_url": "https://github.com/WithSecureLabs/chainsaw/releases/download/v2.16.0/chainsaw_all_platforms+rules.zip",
+      "windows_binary": "chainsaw/chainsaw_x86_64-pc-windows-msvc.exe",
+      "bundles": "chainsaw/sigma chainsaw/mappings chainsaw/rules"
+    },
+    "hayabusa": {
+      "filename": "hayabusa-3.9.0-win-x64.zip",
+      "version": "3.9.0",
+      "size": 45248831,
+      "sha256": "cf3a1de0e7819dbcef5061632dab25b6dc344d828ba6bfdf6f2ef80ba7299eab",
+      "source_url": "https://github.com/Yamato-Security/hayabusa/releases/download/v3.9.0/hayabusa-3.9.0-win-x64.zip",
+      "windows_binary": "hayabusa-3.9.0-win-x64.exe",
+      "bundles": "rules/ config/"
+    }
+  }
+}
