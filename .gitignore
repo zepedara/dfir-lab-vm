@@ -1,0 +1,16 @@
+# Packer build output + plugins
+packer/output-*/
+packer/.packer.d/
+packer/*.pkrvars.hcl
+!packer/*.pkrvars.hcl.example
+*.box
+crash.log
+
+# Downloaded ISOs / caches
+*.iso
+packer_cache/
+
+# Local
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,17 @@
+# Copy to config.pkrvars.hcl and run:  packer build -var-file=config.pkrvars.hcl .
+# Every value is optional - these mirror the defaults in dfir-win.pkr.hcl.
+
+# --- Eval ISO (Microsoft rotates these links; update if the default 404s) ----
+# Get a fresh Win10 Enterprise eval ISO from:
+#   https://www.microsoft.com/evalcenter/evaluate-windows-10-enterprise
+# iso_url      = "https://software-static.download.prss.microsoft.com/.../...ENTERPRISEEVAL...x64FRE_en-us.iso"
+# iso_checksum = "sha256:PUT_THE_REAL_SHA256_HERE"
+
+# --- VM specs ----------------------------------------------------------------
+# cpus      = 4
+# memory    = 8192     # MB
+# disk_size = 81920    # MB (80 GB)
+
+# --- Guest creds (also baked into autounattend.xml; change in BOTH if you edit) -
+# winrm_username = "Analyst"
+# winrm_password = "dfir"
