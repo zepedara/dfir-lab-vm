@@ -139,20 +139,28 @@ try {
 # ---------------------------------------------------------------------------
 Write-Step 'Ensuring HashiCorp Packer is installed'
 function Test-Packer { try { return [bool](Get-Command packer -ErrorAction Stop) } catch { return $false } }
+function Update-SessionPath {
+    $m = [Environment]::GetEnvironmentVariable('PATH','Machine')
+    $u = [Environment]::GetEnvironmentVariable('PATH','User')
+    foreach ($p in ("$m;$u" -split ';')) { if ($p -and (($env:PATH -split ';') -notcontains $p)) { $env:PATH = "$env:PATH;$p" } }
+}
 
 if (-not (Test-Packer)) {
-    $installed = $false
+    # 1) winget (verify AFTER - winget prints "No package found" without throwing, so never trust it blindly)
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Warn2 'Installing Packer via winget...'
-        try { winget install --id HashiCorp.Packer -e --accept-source-agreements --accept-package-agreements --silent; $installed = $true } catch {}
+        Write-Warn2 'Trying Packer via winget...'
+        cmd /c "winget install --id HashiCorp.Packer -e --accept-source-agreements --accept-package-agreements --silent" 2>&1 | Out-Null
+        Update-SessionPath
     }
-    if (-not $installed -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-        Write-Warn2 'Installing Packer via choco...'
-        try { choco install packer -y; $installed = $true } catch {}
+    # 2) choco
+    if (-not (Test-Packer) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Warn2 'Trying Packer via choco...'
+        cmd /c "choco install packer -y" 2>&1 | Out-Null
+        Update-SessionPath
     }
-    if (-not $installed) {
-        # Direct zip fallback - no package manager required.
-        Write-Warn2 'Installing Packer via direct download...'
+    # 3) direct download from HashiCorp (no package manager needed - the reliable path)
+    if (-not (Test-Packer)) {
+        Write-Warn2 'Installing Packer via direct download from HashiCorp...'
         $pv  = '1.11.2'
         $url = "https://releases.hashicorp.com/packer/$pv/packer_${pv}_windows_amd64.zip"
         $dst = Join-Path $env:ProgramData 'packer'
@@ -160,15 +168,14 @@ if (-not (Test-Packer)) {
         $zip = Join-Path $env:TEMP 'packer.zip'
         Invoke-WebRequest $url -OutFile $zip -UseBasicParsing
         Expand-Archive $zip -DestinationPath $dst -Force
-        Remove-Item $zip -Force
-        $env:PATH = "$dst;$env:PATH"
-        [Environment]::SetEnvironmentVariable('PATH', "$dst;$([Environment]::GetEnvironmentVariable('PATH','Machine'))", 'Machine')
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        if (($env:PATH -split ';') -notcontains $dst) { $env:PATH = "$dst;$env:PATH" }
+        $mp = [Environment]::GetEnvironmentVariable('PATH','Machine')
+        if ($mp -notlike "*$dst*") { [Environment]::SetEnvironmentVariable('PATH', "$mp;$dst", 'Machine') }
     }
-    # refresh PATH for winget/choco installs in this session
-    $env:PATH = [Environment]::GetEnvironmentVariable('PATH','Machine') + ';' + [Environment]::GetEnvironmentVariable('PATH','User')
 }
-if (-not (Test-Packer)) { Die 'Packer is still not on PATH. Open a NEW elevated PowerShell and re-run, or install Packer manually: https://developer.hashicorp.com/packer/install' }
-Write-Ok "Packer: $((packer version) -split "`n" | Select-Object -First 1)"
+if (-not (Test-Packer)) { Die 'Packer install failed. Install it manually from https://developer.hashicorp.com/packer/install and re-run.' }
+Write-Ok "Packer: $((packer version) -split [Environment]::NewLine | Select-Object -First 1)"
 
 # ---------------------------------------------------------------------------
 # 3. Download the kit
