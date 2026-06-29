@@ -46,6 +46,7 @@ Set-StrictMode -Version 1
 # ---------------------------------------------------------------------------
 $RepoOwner = 'zepedara'
 $RepoName  = 'dfir-lab-vm'
+$DepsBase  = "https://github.com/$RepoOwner/$RepoName/releases/download/deps-v1"  # vendored deps
 $Branch    = if ($env:DFIR_VM_BRANCH) { $env:DFIR_VM_BRANCH } else { 'main' }
 $KitDir    = if ($env:DFIR_VM_DIR)    { $env:DFIR_VM_DIR }    else { Join-Path $env:USERPROFILE 'dfir-lab-vm' }
 $SkipBuild = [bool]$env:DFIR_SKIP_BUILD
@@ -283,21 +284,37 @@ function Update-SessionPath {
 }
 
 if (-not (Test-Packer)) {
-    # 1) winget (verify AFTER - winget prints "No package found" without throwing, so never trust it blindly)
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
+    # 1) VENDORED direct download (works on a locked-down net - no package mgr,
+    #    no releases.hashicorp.com). This is the reliable, offline-friendly path.
+    Write-Warn2 'Installing Packer from the vendored deps-v1 release...'
+    try {
+        $dst = Join-Path $env:ProgramData 'packer'
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        $zip = Join-Path $env:TEMP 'packer.zip'
+        Invoke-WebRequest "$DepsBase/packer_1.11.2_windows_amd64.zip" -OutFile $zip -UseBasicParsing
+        Expand-Archive $zip -DestinationPath $dst -Force
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        if (($env:PATH -split ';') -notcontains $dst) { $env:PATH = "$dst;$env:PATH" }
+        $mp = [Environment]::GetEnvironmentVariable('PATH','Machine')
+        if ($mp -notlike "*$dst*") { [Environment]::SetEnvironmentVariable('PATH', "$mp;$dst", 'Machine') }
+    } catch {
+        Write-Warn2 "Vendored Packer download failed: $($_.Exception.Message). Trying package managers..."
+    }
+    # 2) winget (verify AFTER - winget prints "No package found" without throwing)
+    if (-not (Test-Packer) -and (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Warn2 'Trying Packer via winget...'
         cmd /c "winget install --id HashiCorp.Packer -e --accept-source-agreements --accept-package-agreements --silent" 2>&1 | Out-Null
         Update-SessionPath
     }
-    # 2) choco
+    # 3) choco
     if (-not (Test-Packer) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
         Write-Warn2 'Trying Packer via choco...'
         cmd /c "choco install packer -y" 2>&1 | Out-Null
         Update-SessionPath
     }
-    # 3) direct download from HashiCorp (no package manager needed - the reliable path)
+    # 4) LAST-RESORT direct download from HashiCorp (only if vendored + pkg mgrs failed)
     if (-not (Test-Packer)) {
-        Write-Warn2 'Installing Packer via direct download from HashiCorp...'
+        Write-Warn2 'Installing Packer via direct download from HashiCorp (last resort)...'
         $pv  = '1.11.2'
         $url = "https://releases.hashicorp.com/packer/$pv/packer_${pv}_windows_amd64.zip"
         $dst = Join-Path $env:ProgramData 'packer'
@@ -403,9 +420,34 @@ auto-selects the "Windows 10 Pro" edition.
 $packerDir = Join-Path $KitDir 'packer'
 Push-Location $packerDir
 try {
-    Write-Step 'Initialising Packer plugins (vmware)'
-    packer init .
-    if ($LASTEXITCODE -ne 0) { Die 'packer init failed (could not install the vmware plugin). Check network/proxy and re-run.' }
+    Write-Step 'Installing the vmware Packer plugin (offline, from vendored deps-v1)'
+    $pluginZip = Join-Path $env:TEMP 'packer-plugin-vmware.zip'
+    $pluginDir = Join-Path $env:TEMP 'packer-plugin-vmware'
+    $pluginOk  = $false
+    try {
+        Invoke-WebRequest "$DepsBase/packer-plugin-vmware_v1.0.11_x5.0_windows_amd64.zip" -OutFile $pluginZip -UseBasicParsing
+        Remove-Item $pluginDir -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive $pluginZip -DestinationPath $pluginDir -Force
+        $pluginExe = Get-ChildItem $pluginDir -Recurse -Filter 'packer-plugin-vmware*.exe' | Select-Object -First 1
+        if (-not $pluginExe) { throw 'plugin .exe not found inside the vendored zip' }
+        # Offline install: registers the plugin for source github.com/hashicorp/vmware.
+        & packer plugins install --path "$($pluginExe.FullName)" "github.com/hashicorp/vmware"
+        if ($LASTEXITCODE -eq 0) {
+            $pluginOk = $true
+            Write-Ok 'vmware plugin v1.0.11 installed offline from deps-v1'
+        } else {
+            Write-Warn2 "packer plugins install returned exit $LASTEXITCODE - will try online packer init as a fallback."
+        }
+    } catch {
+        Write-Warn2 "Offline vmware plugin install failed: $($_.Exception.Message). Falling back to online 'packer init'."
+    } finally {
+        Remove-Item $pluginZip -Force -ErrorAction SilentlyContinue
+    }
+    if (-not $pluginOk) {
+        # Fallback ONLY if the vendored offline install did not succeed (needs internet).
+        packer init .
+        if ($LASTEXITCODE -ne 0) { Die 'Could not install the vmware plugin offline (deps-v1) OR online (packer init). Check the deps-v1 release / network and re-run.' }
+    }
 
     Write-Step 'Validating the template'
     # iso_url/iso_checksum are always passed now (resolved in step 4 above:
