@@ -56,11 +56,19 @@ The build is **idempotent**: re-run the one-liner to resume after a failure.
 ```
 Windows 10 Enterprise (Evaluation)  -  Analyst / dfir
  |- WSL2 + Ubuntu + Docker engine
- |     '- dfir-aio:v2 container loaded (offline DFIR toolbox)
- |- C:\dfir\tools   EZ Tools, Chainsaw, Hayabusa, Sysinternals  (on PATH)
- |- C:\dfir\lab     dfir-training-lab (modules 01-10 + data)
- '- Desktop\DFIR-LAB-README.html + shortcuts + a `dfir-aio` PowerShell helper
+ |     '- dfir-aio:v2 container docker-loaded (resident, offline DFIR toolbox)
+ |- C:\dfir\tools   EZ Tools(+maps), Chainsaw(+Sigma), Hayabusa(+rules), Sysinternals  (PATH)
+ |- C:\dfir\lab     dfir-training-lab (modules 01-10 + ALL data baked in)
+ |- C:\dfir\bin     dfir-update / dfir-import / dfir-reindex  (grow content later)
+ |- C:\dfir\offline-selftest.ps1   (air-gap acceptance test)
+ '- Desktop  README + modules index + shortcuts + `dfir-aio` PowerShell helper
 ```
+
+**Offline by design:** internet is used **only during the build**. The finished VM runs
+the **entire** lab with the **network disconnected** - the container is `docker load`ed
+in, all tool rules/maps are synced in, and every module's data is fetched at build. Prove
+it with `C:\dfir\offline-selftest.ps1` (NIC off) - it checks every module native **and**
+`docker run --network none`. See `TESTPLAN.md` for the acceptance gate.
 
 Output is a **VMware Workstation Pro importable VM** (`.vmx` + `.vmdk`) under
 `packer/output-dfir-lab-vm/`. Open it in Workstation Pro (**File -> Open**) and **Power On**.
@@ -80,11 +88,13 @@ dfir-lab-vm/
 |   |- 00-wsl2.ps1               # enable WSL2 features
 |   |- 10-docker.ps1             # Ubuntu + Docker engine in WSL2
 |   |- 20-dfir-aio.ps1           # load dfir-aio:v2 (GHCR pull / release fallback)
-|   |- 30-windows-tools.ps1      # EZ Tools + Chainsaw + Hayabusa + Sysinternals
-|   |- 40-clone-lab.ps1          # clone dfir-training-lab to C:\dfir\lab
-|   '- 50-shortcuts-readme.ps1   # aliases, shortcuts, desktop README
+|   |- 30-windows-tools.ps1      # EZ Tools(+maps) + Chainsaw(+Sigma) + Hayabusa(+rules) + Sysinternals
+|   |- 40-clone-lab.ps1          # clone dfir-training-lab + run every get-data.sh (bake data)
+|   |- 50-shortcuts-readme.ps1   # aliases, shortcuts, desktop README + modules index
+|   |- 55-content-update.ps1     # install dfir-update (online) / dfir-import (offline pack)
+|   '- 60-verify-offline.ps1     # air-gap check + comprehensive offline self-test
 |- docs/DFIR_VM_KIT.md           # full kit doc
-|- TESTPLAN.md                   # how to validate + the end-to-end test plan
+|- TESTPLAN.md                   # validation + the OFFLINE ACCEPTANCE GATE
 '- README.md
 ```
 

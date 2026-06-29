@@ -39,20 +39,35 @@ try {
     # -NetVersion 9 pulls the .NET 9 self-contained builds (no separate runtime needed).
     & powershell -NoProfile -ExecutionPolicy Bypass -File $gzt -Dest $EZ -NetVersion 9
     Write-Host "[ez] EZ tools installed under $EZ"
+
+    # AIR-GAP: bake the maps/definitions locally so tools never fetch at runtime.
+    # EvtxECmd needs Maps\, RECmd needs BatchExamples\, SQLECmd needs Maps\. Their
+    # --sync downloads those packs now (build time) so the VM is offline-ready.
+    foreach ($t in @('EvtxECmd','RECmd','SQLECmd')) {
+        $tExe = Get-ChildItem $EZ -Recurse -Filter "$t.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($tExe) {
+            Write-Host "[ez] Syncing $t maps/definitions (offline bake)..."
+            try { & $tExe.FullName --sync 2>$null } catch { Write-Warning "[ez] $t --sync failed: $($_.Exception.Message)" }
+        }
+    }
 } catch {
     Write-Warning "[ez] Get-ZimmermanTools failed: $($_.Exception.Message). EZ tools can be installed later from the desktop README."
 }
 
 # --------------------------------- Chainsaw ---------------------------------
-Write-Host '[chainsaw] Installing Chainsaw (Windows build)...'
+# AIR-GAP: grab the "+rules" asset so the Sigma rules + event mappings are baked
+# in. We KEEP the whole extracted tree (sigma\, mappings\, rules\) - never delete
+# it - so offline `chainsaw hunt ... -s <sigma> --mapping <mappings>` works.
+Write-Host '[chainsaw] Installing Chainsaw (Windows build + bundled Sigma rules)...'
 try {
-    $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms.*\.zip$'
+    try   { $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms\+rules\.zip$' }
+    catch { $url = Get-LatestRelease 'WithSecureLabs/chainsaw' 'chainsaw_all_platforms.*\.zip$' }
     Expand-To $url $ChainsawD
-    # The archive nests a chainsaw\ folder containing chainsaw_x86_64-pc-windows-msvc.exe
     $exe = Get-ChildItem $ChainsawD -Recurse -Filter '*windows*.exe' | Select-Object -First 1
     if ($exe) { Copy-Item $exe.FullName (Join-Path $ChainsawD 'chainsaw.exe') -Force }
-    # Bring along the bundled sigma + mappings if present (for offline hunting).
-    Write-Host '[chainsaw] Installed.'
+    $sigma = Get-ChildItem $ChainsawD -Recurse -Directory -Filter 'sigma' -ErrorAction SilentlyContinue | Select-Object -First 1
+    $maps  = Get-ChildItem $ChainsawD -Recurse -Directory -Filter 'mappings' -ErrorAction SilentlyContinue | Select-Object -First 1
+    Write-Host "[chainsaw] Installed. Sigma rules baked: $([bool]$sigma); mappings baked: $([bool]$maps)"
 } catch {
     Write-Warning "[chainsaw] install failed: $($_.Exception.Message)"
 }
@@ -64,9 +79,11 @@ try {
     Expand-To $url $HayabusaD
     $exe = Get-ChildItem $HayabusaD -Recurse -Filter 'hayabusa*.exe' | Select-Object -First 1
     if ($exe) { Copy-Item $exe.FullName (Join-Path $HayabusaD 'hayabusa.exe') -Force }
-    # Build the rules/encoded-rules so it works offline.
+    # AIR-GAP: download the rules NOW (build time) into rules\ so timeline/detect
+    # works offline. update-rules clones the hayabusa-rules repo locally.
     try { Push-Location $HayabusaD; & (Join-Path $HayabusaD 'hayabusa.exe') update-rules 2>$null; Pop-Location } catch {}
-    Write-Host '[hayabusa] Installed.'
+    $hrules = Get-ChildItem $HayabusaD -Recurse -Directory -Filter 'rules' -ErrorAction SilentlyContinue | Select-Object -First 1
+    Write-Host "[hayabusa] Installed. Rules baked: $([bool]$hrules)"
 } catch {
     Write-Warning "[hayabusa] install failed: $($_.Exception.Message)"
 }

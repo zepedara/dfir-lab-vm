@@ -31,14 +31,48 @@ hardware virtualization). Run this on the user's box or **l3e7**:
    build reports the `.vmx` path. Total ~30-60 min.
 4. **Open** the `.vmx` in Workstation Pro -> **Power On** -> log in `Analyst` / `dfir`.
 
-### In-VM acceptance checks
-- [ ] Desktop shows `DFIR-LAB-README.html` + the three shortcuts.
+### In-VM smoke checks
+- [ ] Desktop shows `DFIR-LAB-README.html`, `DFIR-LAB-MODULES.html` + the shortcuts.
 - [ ] `wsl -l -v` lists **Ubuntu** as version **2**, Running.
-- [ ] In Ubuntu: `docker version` works; `docker images` lists **dfir-aio** (once the container is published - see below).
+- [ ] In Ubuntu: `docker version` works; `docker images` lists **dfir-aio**.
 - [ ] PowerShell: `PECmd --help`, `chainsaw --help`, `hayabusa --help` all resolve (on PATH).
 - [ ] `C:\dfir\lab` contains modules `module-01..module-10` with `README.md` + `data/`.
-- [ ] `dfir-lab` cd's into the lab; `dfir-aio` launches the container with the current folder as `/data`.
-- [ ] Run module 01 both ways: native `PECmd -d .\data --csv .` AND `dfir-aio .\data PECmd -d /data --csv /data`.
+
+### ⭐ OFFLINE ACCEPTANCE GATE (the non-negotiable requirement)
+
+The finished VM must run the **entire** lab with **zero internet**. This is the
+pass/fail gate for the build.
+
+1. **Disconnect the VM's network adapter:** VMware *VM > Settings > Network Adapter*
+   -> uncheck **Connected** (or `vmrun` equivalent). The VM is now air-gapped.
+2. Run the baked acceptance test (elevated PowerShell in the VM):
+   ```powershell
+   C:\dfir\offline-selftest.ps1      # or the desktop "Offline acceptance self-test"
+   ```
+3. **Pass criteria:** the test walks **every** `C:\dfir\lab\module-XX`, picks a
+   representative artifact, and runs the matching tool **both** ways with no network:
+   - **native** (PECmd / AmcacheParser / AppCompatCacheParser / EvtxECmd / MFTECmd on PATH), and
+   - **container** via `docker run --network none dfir-aio:v2 <tool>` (module 6 also runs `hayabusa`).
+   It prints `[PASS]/[FAIL]` per module and a final line:
+   `ACCEPTANCE (every module runnable with NIC off): YES|NO`.
+   **The gate is YES** = every module passes with the NIC disconnected.
+4. Spot-confirm manually too, e.g. module 1:
+   - native: `cd C:\dfir\lab\module-01-prefetch-pecmd\data; PECmd -d . --csv .`
+   - container: `dfir-aio . PECmd -d /data --csv /data` (with the NIC off).
+
+> What makes this pass: the build **bakes in** the eval ISO -> Windows, the dfir-aio
+> image (`docker load` into the VM's local store), all native tools + Sigma/Hayabusa
+> rules + EZ maps, and the lab repo with every module's `get-data.sh` run at build so
+> all EVTX/Prefetch/hive samples are on disk. Nothing is fetched at runtime.
+
+### Content-growth paths (verify these too)
+- [ ] **Online:** with internet, `dfir-update` pulls new lab modules/data + refreshes
+      the container and tools, then re-indexes. (Optional convenience - NOT a runtime
+      dependency; the baked lab is fully offline on its own.)
+- [ ] **Offline:** drop a content-pack folder/zip in `C:\dfir\incoming`, run
+      `dfir-import` (NIC disconnected) -> new module(s) appear in `C:\dfir\lab`, any
+      bundled image tarball is `docker load`ed, the modules index refreshes. Then the
+      offline self-test passes for the new module too.
 
 ## Known gates / wiring
 

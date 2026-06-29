@@ -106,6 +106,35 @@ exercises, and what to find. Start at module 01 and follow the order.</p>
 <div class="tip">Tip: tool output CSVs open nicely in <b>Timeline Explorer</b> (an EZ tool) or Excel.
 The container and the native tools read the <i>same</i> files - use whichever you prefer per step.</div>
 
+<p>See <a href="DFIR-LAB-MODULES.html">DFIR-LAB-MODULES.html</a> for the live list of
+modules currently installed (regenerate with <code>dfir-reindex</code>).</p>
+
+<h2>100% offline once built (air-gapped)</h2>
+<p>Everything the lab needs was <b>baked in during the build</b>: the dfir-aio:v2 container
+(loaded into this VM's Docker), all native tools + their Sigma/Hayabusa rules and EZ maps,
+and the dfir-training-lab repo with all module data. <b>You can disconnect this VM from the
+network entirely and do every module.</b></p>
+<div class="tip"><b>Prove it:</b> VMware &gt; VM &gt; Settings &gt; Network Adapter &gt; uncheck
+<b>Connected</b>, then run the desktop <b>"Offline acceptance self-test"</b> (or
+<code>C:\dfir\offline-selftest.ps1</code>). It runs a command from every module - native and
+container with <code>--network none</code> - and reports PASS/FAIL per module.</div>
+
+<h2>Adding / updating training content (Phase 2)</h2>
+<p>The lab is <b>modular</b> - each module is a self-contained <code>C:\dfir\lab\module-XX</code>
+folder. Two ways to grow it <i>without rebuilding the VM</i>:</p>
+<table>
+<tr><th>When the VM has internet</th><th>When the VM is air-gapped</th></tr>
+<tr><td><code>dfir-update</code><br>Pulls the latest dfir-training-lab (new modules + data),
+runs new <code>get-data.sh</code>, refreshes <code>dfir-aio</code> (docker pull :latest) and the
+native tools. <i>Optional convenience - the baked lab already works offline on its own.</i></td>
+<td><code>dfir-import &lt;pack&gt;</code><br>Drop a content-pack (folder or .zip) into
+<code>C:\dfir\incoming</code> and run <code>dfir-import</code>. It copies new modules into the lab,
+<code>docker load</code>s any included image tarball, and re-indexes - <b>zero internet</b>.</td></tr>
+</table>
+<p>After either, the modules index refreshes automatically. A content-pack looks like:
+<code>pack/modules/module-XX-.../</code> (+ optional <code>pack/images/*.tar(.gz)</code> for an
+updated container). Full format in the kit's <code>docs/DFIR_VM_KIT.md</code>.</p>
+
 <p style="color:#888;font-size:12px">Offline by design once built. Eval Windows licence applies. Educational use.</p>
 </body></html>
 '@

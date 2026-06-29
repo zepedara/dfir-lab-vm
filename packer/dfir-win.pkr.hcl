@@ -170,6 +170,18 @@ build {
     script = "../scripts/50-shortcuts-readme.ps1"
   }
 
+  # 6a. Content growth paths: dfir-update (online) + dfir-import (offline pack).
+  provisioner "powershell" {
+    script = "../scripts/55-content-update.ps1"
+  }
+
+  # 6b. AIR-GAP verification + install the runtime offline self-test in the VM.
+  provisioner "powershell" {
+    script            = "../scripts/60-verify-offline.ps1"
+    elevated_user     = var.winrm_username
+    elevated_password = var.winrm_password
+  }
+
   # 7. Final tidy: clear temp, leave a build manifest.
   provisioner "powershell" {
     inline = [

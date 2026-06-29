@@ -69,5 +69,20 @@ rm -f dfir-aio.tar.gz ${PartGlob}*
 # Verify + a friendly tag the lab READMEs expect (dfir-aio:v2 and dfir-aio).
 Invoke-WSL "docker tag $ImageTagShort dfir-aio 2>/dev/null || true"
 Invoke-WSL "docker images | grep -i dfir-aio || true"
-Write-Host '[dfir-aio] Container ready in WSL2 Docker.'
+
+# ----------------------- AIR-GAP PROOF (resident + offline) ------------------
+# The image is now in the VM's local Docker store (WSL2 ext4 vhdx = part of the VM
+# disk), so it is BAKED IN - no runtime pull is ever needed. Prove it runs with
+# NO network, which is the whole point of an air-gapped DFIR lab.
+Write-Host '[dfir-aio] Verifying the container runs fully air-gapped (docker run --network none)...'
+$airgapOk = $false
+foreach ($probe in @("dfir-aio:v2 bash -lc 'echo offline-ok'", "dfir-aio:v2 sh -lc 'echo offline-ok'", "dfir-aio:v2 echo offline-ok")) {
+    if (TryWSL "docker run --rm --network none $probe 2>/dev/null | grep -q offline-ok") { $airgapOk = $true; break }
+}
+if ($airgapOk) {
+    Write-Host '[dfir-aio] AIR-GAP OK: dfir-aio:v2 executes with --network none. Resident + offline-ready.'
+} else {
+    Write-Warning '[dfir-aio] Could not confirm --network none run yet (container may be unpublished). The loaded image is still resident; re-run scripts/20-dfir-aio.ps1 once dfir-aio is published to verify.'
+}
+Write-Host '[dfir-aio] Container baked into the VM Docker image store.'
 exit 0

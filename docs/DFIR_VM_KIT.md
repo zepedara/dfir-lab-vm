@@ -43,6 +43,50 @@ Open it in Workstation Pro (**File -> Open**) and **Power On**.
 
 ---
 
+## 100% offline once built (the core guarantee)
+
+Internet is used **only during the Packer build**. Everything is **baked into the VM**
+so the finished VM runs the **entire** lab with the network adapter **disconnected**:
+
+| Baked in at build | How |
+|---|---|
+| Windows | from the free eval ISO (downloaded during build) |
+| **dfir-aio:v2 container** | `docker load`ed into the VM's WSL2 Docker store (resident, not a runtime pull) |
+| EZ tools + **maps** | `Get-ZimmermanTools` + `EvtxECmd/RECmd/SQLECmd --sync` at build |
+| Chainsaw + **Sigma rules**, Hayabusa + **rules** | `+rules` asset + `update-rules` at build |
+| dfir-training-lab + **all data** | repo cloned + **every module's `get-data.sh` run at build** |
+
+**Acceptance gate:** disconnect the NIC and run `C:\dfir\offline-selftest.ps1` (or the
+desktop *Offline acceptance self-test*). It runs a representative command for **every**
+module - native **and** `docker run --network none dfir-aio:v2 ...` - and reports
+`ACCEPTANCE (every module runnable with NIC off): YES|NO`. See `TESTPLAN.md`.
+
+---
+
+## Adding / updating training content (Phase 2, no VM rebuild)
+
+The lab is **modular** - each module is a self-contained `C:\dfir\lab\module-XX` folder,
+so "add a module" = drop a folder. The desktop modules index auto-lists what's present
+(`dfir-reindex`). Two growth paths:
+
+| `dfir-update` (ONLINE, optional) | `dfir-import <pack>` (OFFLINE) |
+|---|---|
+| With internet: `git pull` the lab (new modules + data), run new `get-data.sh`, `docker pull ghcr.io/zepedara/dfir-aio:latest` (retag `:v2`), refresh native tools, re-index. | Air-gapped: drop a content-pack folder/zip into `C:\dfir\incoming`, run `dfir-import`. Copies modules into the lab, `docker load`s any included image tarball, re-indexes. Zero internet. |
+
+> `dfir-update` is a **convenience only** - it is **not** a runtime dependency. The
+> baked lab is fully offline on its own; `dfir-import` is the offline-safe growth path.
+
+**Content-pack format** (folder or `.zip`):
+```
+pack/
+  modules/module-XX-name/...     # dropped into C:\dfir\lab\
+  images/*.tar | *.tar.gz        # optional: docker load (e.g. an updated dfir-aio)
+  images/dfir-aio.part.*         # optional: split parts, reassembled + docker load
+  pack.json                      # optional: {"name","version","notes"}
+```
+
+---
+
 ## How it maps to the lab
 
 The dfir-training-lab walkthrough is done **two ways from the same files** - the VM lets you do either per step:
@@ -69,9 +113,10 @@ bootstrap.ps1  --(checks, installs Packer, clones kit)-->  packer build
        |  downloads free Win10 Enterprise EVAL ISO
        |  http/autounattend.xml -> hands-free install + WinRM
        v  provisioners (inside the building VM):
-   00-wsl2 -> [reboot] -> 10-docker -> 20-dfir-aio -> 30-windows-tools -> 40-clone-lab -> 50-shortcuts
+   00-wsl2 -> [reboot] -> 10-docker -> 20-dfir-aio(docker load) -> 30-windows-tools(+rules/maps)
+     -> 40-clone-lab(run every get-data.sh) -> 50-shortcuts -> 55-content-update -> 60-verify-offline
        v
- output-dfir-lab-vm/dfir-lab-vm.vmx  (+ .vmdk)
+ output-dfir-lab-vm/dfir-lab-vm.vmx  (+ .vmdk)   [runs the whole lab with NIC off]
 ```
 
 ---
