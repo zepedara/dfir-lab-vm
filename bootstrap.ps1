@@ -119,7 +119,8 @@ try {
 } catch { Write-Warn2 "Could not query virtualization state: $($_.Exception.Message)" }
 
 # --- Free disk --------------------------------------------------------------
-$drive = (Get-Item $KitDir -ErrorAction SilentlyContinue) ?? (Get-Item $env:USERPROFILE)
+$drive = Get-Item $KitDir -ErrorAction SilentlyContinue
+    if (-not $drive) { $drive = Get-Item $env:USERPROFILE }
 $driveLetter = ([System.IO.Path]::GetPathRoot($KitDir)).TrimEnd('\')
 $freeGB = [math]::Round((Get-PSDrive ($driveLetter.TrimEnd(':'))).Free / 1GB, 1)
 if ($freeGB -lt $MinFreeGB) {
