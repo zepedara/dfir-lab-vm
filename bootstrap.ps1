@@ -48,7 +48,7 @@ $MinFreeGB = 30
 function Write-Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Write-Ok($m)   { Write-Host "    [ok] $m"   -ForegroundColor Green }
 function Write-Warn2($m){ Write-Host "    [!]  $m"   -ForegroundColor Yellow }
-function Die($m)        { Write-Host "`n[X] $m`n"    -ForegroundColor Red; exit 1 }
+function Die($m)        { Write-Host "`n[X] $m`n"    -ForegroundColor Red; throw $m }
 
 Write-Host @'
   ____  _____ ___ ____    _          _      __     ____  __
