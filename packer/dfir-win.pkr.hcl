@@ -26,13 +26,17 @@ packer {
 variable "iso_url" {
   type = string
   # ---------------------------------------------------------------------------
-  # WIRE-THIS (optional): Microsoft rotates eval ISO download links periodically.
-  # Default points at the Win10 Enterprise eval. If MS changes it, grab a fresh
-  # link from https://www.microsoft.com/evalcenter/evaluate-windows-10-enterprise
-  # and pass it:  packer build -var iso_url=... -var iso_checksum=sha256:...
-  # or set $env:DFIR_ISO_URL / $env:DFIR_ISO_SHA256 before the one-liner.
+  # The one-liner (bootstrap.ps1) ALWAYS passes this via -var: it auto-resolves a
+  # FRESH, currently-valid Windows 10 link from Microsoft at build time using the
+  # vendored Fido helper (tools/Fido.ps1) - so you set nothing. The default below
+  # is only a fallback for running `packer build` by hand WITHOUT -var; Microsoft
+  # rotates these links so it WILL eventually 404. To run standalone, pass a fresh
+  # link:  packer build -var iso_url=... -var iso_checksum=none .  (or set
+  # $env:DFIR_ISO_URL before the one-liner to use your own / a local file:/// ISO).
+  # NB: a RETAIL multi-edition Win10 x64 ISO is expected; autounattend.xml selects
+  # the "Windows 10 Pro" edition. LEGAL: we never host Windows; it comes from MS.
   # ---------------------------------------------------------------------------
-  default = "https://software-static.download.prss.microsoft.com/sg/download/888969d5-f34g-4e03-ac9d-1f9786c66749/19045.2006.220908-0225.22h2_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
+  default = "https://software.download.prss.microsoft.com/dbazure/Win10_22H2_English_x64v1.iso"
 }
 
 variable "iso_checksum" {

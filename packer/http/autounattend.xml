@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  DFIR Lab VM - hands-free Windows 10 Enterprise EVALUATION install.
+  DFIR Lab VM - hands-free Windows 10 Pro install.
+  - Targets a RETAIL MULTI-EDITION Windows 10 x64 ISO (what Fido / the Microsoft
+    download API hands out, e.g. Win10_22H2_English_x64). The unattended setup
+    selects the "Windows 10 Pro" image via /IMAGE/NAME + the public generic
+    "KMS client setup key" (edition-select only; does NOT activate - lab use,
+    30-day rearm). Works without any purchased key.
   - Legacy BIOS / MBR single partition (matches firmware="bios" in the template).
   - Creates local admin "Analyst" / "dfir", auto-logon once, skips all OOBE.
   - First-logon command enables WinRM so Packer can connect and provision.
-  Image name MUST match the eval ISO's edition: "Windows 10 Enterprise Evaluation".
+  Image name MUST match an edition present in the ISO: "Windows 10 Pro".
 -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
 
@@ -57,14 +62,20 @@
           <InstallFrom>
             <MetaData wcm:action="add">
               <Key>/IMAGE/NAME</Key>
-              <Value>Windows 10 Enterprise Evaluation</Value>
+              <Value>Windows 10 Pro</Value>
             </MetaData>
           </InstallFrom>
         </OSImage>
       </ImageInstall>
       <UserData>
-        <!-- Eval media is licence-key-free. AcceptEula required for hands-free. -->
-        <ProductKey><WillShowUI>OnError</WillShowUI></ProductKey>
+        <!-- Retail multi-edition media: the public generic "KMS client setup key"
+             for Windows 10 Pro SELECTS the Pro edition for a hands-free install so
+             Setup never prompts for a key/edition. It does NOT activate Windows
+             (lab use only, 30-day rearm). Source: Microsoft KMS client setup keys. -->
+        <ProductKey>
+          <Key>W269N-WHGD8-FYP36-XHM89-CKWYV</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
         <AcceptEula>true</AcceptEula>
         <FullName>Analyst</FullName>
         <Organization>DFIR Lab</Organization>
