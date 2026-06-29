@@ -384,30 +384,81 @@ if ($env:DFIR_ISO_URL) {
 } else {
     $fido = Join-Path $KitDir 'tools\Fido.ps1'
     if (-not (Test-Path $fido)) { Die "Vendored Fido helper missing at $fido - the kit download looks incomplete; re-run the one-liner." }
-    Write-Warn2 'No DFIR_ISO_URL set - asking Microsoft for a fresh Windows 10 Pro (22H2 / x64 / English) link via Fido...'
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $fidoOut = & $fido -Win 10 -Rel Latest -Ed Pro -Lang English -Arch x64 -GetUrl 2>$null
-        $IsoUrl  = $fidoOut | Where-Object { $_ -match '^https?://' } | Select-Object -Last 1
-    } catch {
-        Write-Warn2 "Fido raised: $($_.Exception.Message)"
-        $IsoUrl = $null
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Fido auto-fetch, with a fallback chain. The vendored Fido (pbatard v1.70 -
+    # the current latest) asks Microsoft's official consumer-download API for a
+    # fresh, time-limited link. Microsoft fronts that API with an anti-bot layer
+    # ("Sentinel" / error 715-123130) that, as of 2026, intermittently rejects
+    # scripted requests by IP reputation - this is SERVER-SIDE and has been seen
+    # to reject ordinary residential/cellular requests too, so a failure here is
+    # NOT necessarily your local network.
+    #   * Windows 10 is our only auto-INSTALL target: packer\http\autounattend.xml
+    #     selects the "Windows 10 Pro" image. We try it first.
+    #   * If Win10 fails we ALSO probe Windows 11 - purely to DIAGNOSE whether
+    #     Microsoft is rejecting every edition (-> server-side anti-bot) or just
+    #     one (-> likely transient). We never auto-build from a Win11 ISO: the
+    #     unattended file targets "Windows 10 Pro" and a Win11 image would hang at
+    #     setup (wrong /IMAGE/NAME + TPM/SecureBoot gates).
+    function Resolve-FidoUrl([string]$WinArg) {
+        # Returns a PSObject { Url = <http url or $null>; Err = <message or $null> }.
+        # Fido returns the URL on the success stream but prints failures via
+        # Write-Host (information stream), so we merge 6>&1 (and 2>&1) to capture both.
+        $u = $null
+        $e = $null
+        try {
+            $raw = & $fido -Win $WinArg -Rel Latest -Ed Pro -Lang English -Arch x64 -GetUrl 6>&1 2>&1
+            $u = $raw | Where-Object { ($_ -is [string]) -and ($_ -match '^https?://') } | Select-Object -Last 1
+            if (-not $u) {
+                $line = $raw | Where-Object { $_ -match 'Error:' } | Select-Object -Last 1
+                if ($line) { $e = ([string]$line).Trim() } else { $e = 'Fido returned no download URL.' }
+            }
+        } catch {
+            $e = $_.Exception.Message
+        }
+        return (New-Object PSObject -Property @{ Url = $u; Err = $e })
     }
+
+    Write-Warn2 'No DFIR_ISO_URL set - asking Microsoft for a fresh Windows 10 Pro (22H2 / x64 / English) link via Fido...'
+    $win11Diag = ''
+    $r10 = Resolve-FidoUrl '10'
+    if ($r10.Url) {
+        $IsoUrl = $r10.Url
+    } else {
+        Write-Warn2 "Windows 10 auto-fetch failed: $($r10.Err)"
+        Write-Warn2 'Probing Windows 11 (diagnostic only) to see whether Microsoft is blocking every edition...'
+        $r11 = Resolve-FidoUrl '11'
+        if ($r11.Url) {
+            $win11Diag = "  Diagnostic: a Windows 11 link DID resolve but Windows 10 did not - the Win10 path may be a transient block, so re-running later may succeed. (We do NOT auto-build from Win11: this kit's unattended setup targets ""Windows 10 Pro"".)"
+        } else {
+            $win11Diag = "  Diagnostic: Windows 11 was ALSO rejected ($($r11.Err)). Both editions failing points to Microsoft's server-side anti-bot, NOT necessarily your local network."
+        }
+    }
+
     if (-not $IsoUrl -or $IsoUrl -notmatch '^https?://') {
-        Die @'
-Could not auto-fetch a Windows ISO link from Microsoft.
-This is expected on a locked-down / DoD network that blocks Microsoft's download API.
+        Die @"
+Could not auto-fetch a Windows 10 ISO link from Microsoft.
+
+WHY (two possibilities - we do NOT assume which one applies to you):
+  1. Microsoft's download-API anti-bot ("Sentinel" / error 715-123130) rejected
+     the scripted request. This is server-side and IP-reputation based; through
+     2026 it has been rejecting many legitimate residential/cellular requests
+     too, and the block does not clear itself quickly.
+  2. Your network (e.g. a locked-down / DoD network) is blocking Microsoft's
+     download-API endpoints.
+$win11Diag
 
 FIX - point the build at a local Windows 10 x64 ISO from your media share:
 
-    $env:DFIR_ISO_URL = 'file:///C:/path/to/Win10_22H2_English_x64.iso'
+    `$env:DFIR_ISO_URL = 'file:///C:/path/to/Win10_22H2_English_x64.iso'
     # optional integrity check (recommended):
-    $env:DFIR_ISO_SHA256 = '<sha256-of-that-iso>'
+    `$env:DFIR_ISO_SHA256 = '<sha256-of-that-iso>'
 
-then re-run the one-liner. A retail multi-edition Windows 10 x64 ISO (the kind
-Fido or the Microsoft Eval Center hands out) works as-is - the unattended setup
-auto-selects the "Windows 10 Pro" edition.
-'@
+then re-run the one-liner. Use a RETAIL MULTI-EDITION Windows 10 x64 ISO (the
+kind Fido or the Microsoft download page hands out); the unattended setup
+auto-selects the "Windows 10 Pro" edition. A Windows 11 ISO will NOT work with
+this kit's unattended file.
+"@
     }
     $IsoChecksum = 'none'   # Microsoft's link is time-limited and has no stable published SHA256
     Write-Ok 'Got a fresh Microsoft ISO link (downloads from Microsoft at build time)'
