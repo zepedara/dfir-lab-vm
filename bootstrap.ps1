@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
   DFIR Lab VM - one-liner bootstrap.
@@ -33,12 +32,8 @@
       $env:DFIR_ISO_URL    = '<eval iso url>'  # override the eval ISO URL
       $env:DFIR_ISO_SHA256 = '<sha256>'        # checksum for the above
 #>
-
-[CmdletBinding()]
-param()
-
 $ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
+Set-StrictMode -Version 1
 
 # ---------------------------------------------------------------------------
 # Config (env-overridable)
