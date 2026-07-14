@@ -83,6 +83,9 @@ exec '/c/dfir/tools/EZ/net9/PECmd.exe' -f "$@"
 '@
 New-Shim 'chainsaw' "exec '/c/dfir/tools/chainsaw/chainsaw.exe' `"`$@`""
 New-Shim 'vol'      "exec '/c/dfir/Python/Scripts/vol.exe' `"`$@`""
+# python3 / python -> the lab Python 3.12 (module content uses the standard python3 name)
+New-Shim python3 "exec /c/dfir/Python/python.exe `"`$@`""
+New-Shim python  "exec /c/dfir/Python/python.exe `"`$@`""
 foreach ($t in 'olevba', 'oleid', 'mraptor') {
     New-Shim $t "exec '/c/dfir/Python/Scripts/$t.exe' `"`$@`""
 }
