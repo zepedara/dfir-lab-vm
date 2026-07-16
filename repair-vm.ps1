@@ -2,7 +2,7 @@
 # then reassemble + verify. Run it from the folder that has your dfir-lab-vm.ova.part* files.
 #   iwr -useb https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/repair-vm.ps1 | iex
 $ErrorActionPreference = "Stop"
-$base     = "https://github.com/zepedara/dfir-lab-vm/releases/download/vm-v3"
+$base     = "https://github.com/zepedara/dfir-lab-vm/releases/download/vm-v4"
 $rawsha   = "https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/parts.sha256"
 $finalsha = "7E6F834D16373A2BA37798DAE67BEDAB6D5850822E264D21E53CEE17FF84EEFD"
 $parts    = 0..9 | ForEach-Object { "dfir-lab-vm.ova.part{0:D3}" -f $_ }

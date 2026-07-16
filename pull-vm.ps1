@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
   [string]$Repo = "zepedara/dfir-lab-vm",
-  [string]$Tag  = "vm-v3",
+  [string]$Tag  = "vm-v4",
   [string]$Dest = "$env:USERPROFILE\Downloads\dfir-lab-vm",
   [string]$StatusTopic = "dfir-rafa-vmpull"   # public ntfy.sh topic for a best-effort status ping
 )
