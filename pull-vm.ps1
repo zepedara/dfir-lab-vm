@@ -50,7 +50,21 @@ try {
     if ((Test-Path $out) -and ((Get-Item $out).Length -eq $a.size)) { Log "[$i/$($parts.Count)] have $($a.name), skipping"; continue }
     Log ("[{0}/{1}] downloading {2} ({3} MB)..." -f $i, $parts.Count, $a.name, [math]::Round($a.size/1MB))
     $tmp = "$out.partial"
-    Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp -Headers $UA
+    # Robust download: curl.exe with byte-range resume (-C -) + auto-retry, so a
+    # dropped connection CONTINUES instead of restarting the ~1.9 GB part. Falls
+    # back to Invoke-WebRequest (with its own retry loop) if curl is unavailable.
+    $curl = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
+    if ($curl) {
+      & $curl -L --fail --retry 12 --retry-all-errors --retry-delay 3 -C - -A 'dfir-pull' -o $tmp $a.browser_download_url
+      if ($LASTEXITCODE -ne 0) { throw "curl download failed for $($a.name) (exit $LASTEXITCODE)" }
+    } else {
+      $ok = $false
+      for ($r = 1; $r -le 6 -and -not $ok; $r++) {
+        try { Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp -Headers $UA; $ok = $true }
+        catch { Log ("    retry {0}/6 for {1}: {2}" -f $r, $a.name, $_.Exception.Message); Start-Sleep -Seconds ($r*3) }
+      }
+      if (-not $ok) { throw "download failed for $($a.name) after retries" }
+    }
     Move-Item $tmp $out -Force
   }
 
