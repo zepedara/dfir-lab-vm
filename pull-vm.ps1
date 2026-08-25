@@ -106,7 +106,8 @@ try {
   $sizeGB = [math]::Round((Get-Item $ova).Length/1GB, 2)
   Log "DONE. $ovaName ready ($sizeGB GB)."
   Log "Next: open VMware Workstation Pro -> File > Open -> select '$ova' -> Import. Then power it on."
-  Log "Lab login: Analyst / dfir.  In the lab repo run e.g.:  cd module-04-scaling-appcompatprocessor ; acp acp.db load data/fleet ; acp acp.db stack FileName"
+  Log "Lab login: Analyst / DFIRlab2026!  (the prebuilt image; a fresh packer build uses Analyst / dfir)"
+  Log "Try it: cd C:\dfir\lab\module-04-scaling-appcompatprocessor ; acp acp.db load data/fleet ; acp acp.db stack FileName"
   Ping "DONE: $ovaName reassembled ($sizeGB GB), checksum OK. Import in Workstation Pro."
   Write-Host ""
   Write-Host "==================================================================" -ForegroundColor Green

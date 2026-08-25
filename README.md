@@ -88,7 +88,9 @@ The build is **idempotent**: re-run the one-liner to resume after a failure.
 ## What gets built (the VM)
 
 ```
-Windows 10 Enterprise (Evaluation)  -  Analyst / dfir
+Windows 10 Enterprise (Evaluation)  -  Analyst / dfir   <- a FRESH BUILD.
+(The prebuilt v5 OVA from pull-vm.ps1 uses Analyst / DFIRlab2026! instead, and its
+password does not expire.)
  |- WSL2 + Ubuntu + Docker engine
  |     '- dfir-aio:v2 container docker-loaded (resident, offline DFIR toolbox)
  |- C:\dfir\tools   EZ Tools(+maps), Chainsaw(+Sigma), Hayabusa(+rules), Sysinternals  (PATH)

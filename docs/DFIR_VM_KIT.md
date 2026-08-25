@@ -126,7 +126,9 @@ bootstrap.ps1  --(checks, installs Packer, clones kit)-->  packer build
 - **No Windows redistribution.** The build downloads Microsoft's free *evaluation*
   ISO; you accept the eval licence at build time. The kit ships only scripts/config.
 - **Educational / personal** use. The VM is a throwaway lab - change the default
-  `Analyst/dfir` password if you keep it.
+  `Analyst/dfir` password if you keep it (a fresh build). The prebuilt v5 OVA uses
+  `Analyst / DFIRlab2026!` and its password is set never to expire - v4's expired 40 days
+  after the build and locked every user out.
 - **Reversible.** Everything lives under `%USERPROFILE%\dfir-lab-vm` and the VM's
   output folder; delete them to fully undo. Packer is the only host install.
 
