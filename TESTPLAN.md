@@ -1,95 +1,109 @@
-# Test plan - dfir-lab-vm
+# Test plan — dfir-vm
 
-## What was validated on rick (Linux, no VMware)
+**How v5 was actually verified, and how to verify the next one.**
+Rewritten 2026-08-25. The previous version described a container-based acceptance gate that
+no longer exists and a "run it on l3e7" instruction that was no longer true.
 
-These are static checks that do **not** need VMware and were run during the build:
+---
 
-| Check | Tool | Result |
-|---|---|---|
-| Packer template parses + is internally valid | `packer validate` (1.11.2) | see commit notes |
-| Packer template formatting | `packer fmt -check` | applied |
-| Bash provisioner snippets / fallback shell | `shellcheck` | clean (the embedded WSL bash) |
-| autounattend.xml is well-formed XML | `xmllint --noout` | clean |
-| PowerShell scripts parse | PSParser / `pwsh -NoProfile -Command` (if available) | see commit notes |
+## 1. The gate that matters
 
-> `packer validate` needs the `vmware` plugin; `packer init` downloads it. Validation
-> uses placeholder ISO vars where a real eval URL/checksum isn't pinned.
+`tools/validate_lab.sh` runs inside the guest, extracts every module README's ` ```bash ` blocks,
+executes them against the baked evidence and reports per-module PASS/FAIL plus a single verdict
+line:
 
-## What CANNOT be tested on rick - must run on a Windows host with VMware Workstation Pro
+```
+=== RESULT: 26 pass / 0 fail / 0 unvalidated / 0 conceptual (allow-listed) ===
+    missing tools: 0
+LAB_VALIDATION: PASS
+```
 
-The full **end-to-end VMware build is Windows-only** (needs VMware Workstation Pro +
-hardware virtualization). Run this on the user's box or **l3e7**:
+**The packer build now runs this and refuses to package unless it says PASS.** That is the whole
+point: v2 shipped content with no tools, and v4 was packaged with two provisioning steps having
+exited 1, because nothing ever failed the build.
 
-### End-to-end test (the real one)
-1. On the Windows host with **VMware Workstation Pro** installed, open an **elevated PowerShell**.
-2. Run the one-liner:
-   ```powershell
-   iwr https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1 | iex
-   ```
-3. Expect: prereq checks pass -> Packer installs (if needed) -> ISO downloads ->
-   a VMware window drives a hands-free Windows install -> provisioners run ->
-   build reports the `.vmx` path. Total ~30-60 min.
-4. **Open** the `.vmx` in Workstation Pro -> **Power On** -> log in `Analyst` / `dfir`.
+Two design rules the harness enforces, both learned the hard way:
 
-### In-VM smoke checks
-- [ ] Desktop shows `DFIR-LAB-README.html`, `DFIR-LAB-MODULES.html` + the shortcuts.
-- [ ] `wsl -l -v` lists **Ubuntu** as version **2**, Running.
-- [ ] In Ubuntu: `docker version` works; `docker images` lists **dfir-aio**.
-- [ ] PowerShell: `PECmd --help`, `chainsaw --help`, `hayabusa --help` all resolve (on PATH).
-- [ ] `C:\dfir\lab` contains modules `module-01..module-10` with `README.md` + `data/`.
+- **Unknown ⇒ FAIL.** A module the harness cannot validate counts as a failure, not a pass. It
+  previously printed `SKIP` for any module whose fences were not tagged ` ```bash `, which is how
+  module 04 stayed broken and invisible for six weeks.
+- **Tool preflight.** It reports every lab tool that does not resolve on `PATH` before running
+  anything, so "everything failed" becomes "these tools are missing".
 
-### ⭐ OFFLINE ACCEPTANCE GATE (the non-negotiable requirement)
+Run it by hand any time:
 
-The finished VM must run the **entire** lab with **zero internet**. This is the
-pass/fail gate for the build.
+```bash
+bash /c/dfir/validate_lab.sh /c/dfir/lab
+```
 
-1. **Disconnect the VM's network adapter:** VMware *VM > Settings > Network Adapter*
-   -> uncheck **Connected** (or `vmrun` equivalent). The VM is now air-gapped.
-2. Run the baked acceptance test (elevated PowerShell in the VM):
-   ```powershell
-   C:\dfir\offline-selftest.ps1      # or the desktop "Offline acceptance self-test"
-   ```
-3. **Pass criteria:** the test walks **every** `C:\dfir\lab\module-XX`, picks a
-   representative artifact, and runs the matching tool **both** ways with no network:
-   - **native** (PECmd / AmcacheParser / AppCompatCacheParser / EvtxECmd / MFTECmd on PATH), and
-   - **container** via `docker run --network none dfir-aio:v2 <tool>` (module 6 also runs `hayabusa`).
-   It prints `[PASS]/[FAIL]` per module and a final line:
-   `ACCEPTANCE (every module runnable with NIC off): YES|NO`.
-   **The gate is YES** = every module passes with the NIC disconnected.
-4. Spot-confirm manually too, e.g. module 1:
-   - native: `cd C:\dfir\lab\module-01-prefetch-pecmd\data; PECmd -d . --csv .`
-   - container: `dfir-aio . PECmd -d /data --csv /data` (with the NIC off).
+## 2. v5 verification record (2026-08-25)
 
-> What makes this pass: the build **bakes in** the eval ISO -> Windows, the dfir-aio
-> image (`docker load` into the VM's local store), all native tools + Sigma/Hayabusa
-> rules + EZ maps, and the lab repo with every module's `get-data.sh` run at build so
-> all EVTX/Prefetch/hive samples are on disk. Nothing is fetched at runtime.
+| Step | Result |
+|---|---|
+| Lab synced to `dfir-lab@52b9d4a` in the image | 26 modules |
+| Full harness in the guest | **26 pass / 0 fail / 0 unvalidated / 0 tools missing** |
+| Export → `dfir-lab-vm-v5.ova` | 29.06 GB, SHA-256 `dd00d5c44fcd24c3498e15b034b0cb7377d2236779654348197ecd043a99da45` |
+| OVA structure | `tar -tvf` shows `.ovf`, `.mf`, `.vmdk` in that order; `ovf:size` matches the VMDK byte-for-byte |
+| Release | 15 parts + `dfir-lab-vm-v5.ova.sha256` + `parts.sha256` |
+| Puller round-trip | `pull-vm.ps1` fetched from `main`, reassembled the OVA and verified the published SHA-256 |
 
-### Content-growth paths (verify these too)
-- [ ] **Online:** with internet, `dfir-update` pulls new lab modules/data + refreshes
-      the container and tools, then re-indexes. (Optional convenience - NOT a runtime
-      dependency; the baked lab is fully offline on its own.)
-- [ ] **Offline:** drop a content-pack folder/zip in `C:\dfir\incoming`, run
-      `dfir-import` (NIC disconnected) -> new module(s) appear in `C:\dfir\lab`, any
-      bundled image tarball is `docker load`ed, the modules index refreshes. Then the
-      offline self-test passes for the new module too.
+**Provenance, stated plainly:** the v5 image was produced by exporting the *validated* VM
+(Proxmox zvol → streamOptimized VMDK → OVA), not by a clean `packer build`. There is no VMware
+Workstation host in the fleet, and Broadcom now gates that download behind an account. Every fix
+is committed as `scripts/45-v5-fixes.ps1` so a clean bake reproduces the same content.
 
-## Known gates / wiring
+## 3. Verifying a release without downloading 29 GB twice
 
-1. **dfir-aio container publish** - `scripts/20-dfir-aio.ps1` has ONE WIRE-THIS block:
-   - GHCR ref `ghcr.io/zepedara/dfir-aio:v2` (must be public for the bare pull), and
-   - release fallback `project-dfir/dfir-drop` tag `v2`, asset prefix `dfir-aio.part.`.
-   Confirm both once the dfir-drop agent publishes. The VM builds fine before then;
-   the container loads on first `dfir-aio` use after publish.
-2. **Eval ISO URL** - Microsoft rotates the link. If the default 404s, pass a fresh
-   one via `$env:DFIR_ISO_URL` + `$env:DFIR_ISO_SHA256` (or the vars file).
-3. **Repo visibility** - the bare `iwr | iex` one-liner needs the repo **public**
-   (the kit has zero proprietary content). For a private repo, use a token:
-   ```powershell
-   $h=@{Authorization="token <PAT>"}; (iwr -Headers $h https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1).Content | iex
-   ```
-4. **Host hypervisor coexistence** - if the host runs Hyper-V/WSL2/Credential Guard,
-   VMware may need recent builds to share VT-x, or disable Hyper-V on the host. The
-   bootstrap warns about this; the VM ships its **own** WSL2 inside regardless.
-5. **Windows 11 variant** - default is Win10 (no TPM/UEFI hassle). Win11 needs a
-   Win11 eval ISO + UEFI + vTPM (encrypted VM); see the commented block in the template.
+```powershell
+# the whole user path, end to end
+iwr -useb https://raw.githubusercontent.com/project-dfir/dfir-vm/main/pull-vm.ps1 | iex
+```
+
+It downloads every part, reassembles, and **verifies against the release's own
+`.sha256`**. If a part is corrupt:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/project-dfir/dfir-vm/main/repair-vm.ps1 | iex
+```
+
+`repair-vm.ps1` re-checks each part against `parts.sha256` **published in the release**,
+re-downloads only the bad ones, and reassembles. Neither script hardcodes a part count any more —
+that bug made the v4 repairer mathematically unable to succeed.
+
+## 4. In-VM smoke checks
+
+- Desktop shows **START-HERE** and the **DFIR Lab Shell** shortcut.
+- Login `Analyst` / `DFIRlab2026!` — the password **does not expire** (it did in v4, which locked
+  every user out 40 days after the build).
+- `C:\dfir\lab` contains `module-01` … `module-27` (26 dirs; there is no module-13).
+- In Git-Bash: `PECmd`, `EvtxECmd`, `chainsaw`, `hayabusa`, `vol`, `rip`, `acp`, `velociraptor`
+  all resolve by bare name.
+- `C:\dfir\BUILD-INFO.txt` records the lab commit and the validation result.
+
+### Module 20 needs elevation — by design
+
+It queries the **live OS**, so `velociraptor.exe` declares `requireAdministrator`. Right-click
+*DFIR Lab Shell* → **Run as administrator**. Unelevated it fails with `Permission denied`, which
+is Git-Bash's rendering of *"The requested operation requires elevation."*
+
+## 5. Offline use
+
+The VM needs **no internet**. All evidence is baked in at build time and every tool is native —
+there is no container and no runtime download. Disconnect the NIC and the modules still run.
+
+> **Windows Defender must be excluded from `C:\dfir`.** The lab ships real attack telemetry, and
+> Defender quarantines both the samples and anything derived from them — it deleted
+> `module-06/data/high.csv`, the file that module's own Step 5 tells the student to create, and
+> behaviour-blocked `bash.exe` so Git-Bash could not launch the forensic tools. `45-v5-fixes.ps1`
+> adds the exclusions. Do not attempt to disable Defender instead: Tamper Protection re-asserts
+> itself and the exclusion is sufficient.
+
+## 6. Static checks (no VMware needed)
+
+| Check | Tool |
+|---|---|
+| Packer template parses | `packer validate` (needs `packer init` for the vmware plugin) |
+| Template formatting | `packer fmt -check` |
+| `autounattend.xml` well-formed | `xmllint --noout` |
+| PowerShell scripts parse | `pwsh -NoProfile -Command { ... }` / PSParser |
+| Harness syntax | `bash -n tools/validate_lab.sh` |
