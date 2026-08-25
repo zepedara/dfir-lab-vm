@@ -121,8 +121,19 @@ On a native-first build with no WSL present, the whole data-baking step no-ops �
 **ISSUE-12 · Dangling prerequisite:** `35-native-forensic-tools.ps1` states it *"Assumes
 05-native-toolbox.ps1"* — **no such script exists** (that work lives in `32-native-env.ps1`).
 
-**ISSUE-13 · `validate_lab.sh` concatenates all of a module's blocks into one script**, so
-relative `cd`s compound across blocks and one early failure fails the entire module.
+**~~ISSUE-13~~ · WITHDRAWN — not a defect.** Initially filed as *"`validate_lab.sh` concatenates
+all of a module's blocks, so relative `cd`s compound."* **Verified false.** All 26 modules have
+**exactly one** `cd`, at the top, relative to the lab root — a uniform authoring convention that
+makes concatenation the correct design. Recorded rather than deleted because the near-miss is
+the point: the "fix" would have broken 26 working modules. *Check before you fix.*
+
+**ISSUE-16 · Commands reference files that are never created (V3 lesson §6, recurring).**
+module-04 runs `acp acp.db filehitcount evilnames.txt` and `acp acp.db search` against
+`AppCompatSearch.txt` — **neither file exists in the module**, and the only instruction to
+create `evilnames.txt` is an inline comment (`# evilnames.txt contains: palantir.exe`), i.e. in
+prose, not in the block. This is exactly the failure V3_LESSONS §6 documented for module-12's
+`mkdir -p dump`. It survived because module-04 was invisible to the harness (ISSUE-03).
+*This is the clearest proof of PATTERN-C: an unvalidated module silently rots.*
 
 **ISSUE-14 · Legacy `zepedara/*` URLs persist repo-wide.** They currently work via GitHub 301
 redirects (verified: `dfir-training-lab`, `dfir-lab-vm`, `dfir-drop` → 301; raw → 200), so this
@@ -194,7 +205,37 @@ not a sensible test target.
 T5 is deliberately designed to **prove or disprove ISSUE-03**: if the gate reports
 `ACCEPTANCE: YES` while T4 shows real failures, the gate is confirmed non-functional as written.
 
+**Direction (user, 2026-08-25):** pull the VM down and *run every module on it* to see whether it
+works end to end **first**; tackle the issue register afterwards. T1–T4 is therefore the active
+track and the P0/P1 code fixes are deferred to T6. Only two pre-test changes were made, both
+required for the test to measure anything at all:
+1. `module-04` command fences tagged ` ```bash ` — otherwise the module is invisible (ISSUE-03).
+2. `validate_lab.sh` hardened so an unvalidated module fails instead of silently passing.
+
 ### Live log
 
 - `2026-08-24 23:54` — pull started on cthuwu-win, `/var/lib/vz/template/dfir-vm`, 780 GB free.
 - `2026-08-25 00:00` — 2.8 GB / 27.9 GB downloaded, healthy.
+- `2026-08-25 00:0x` — module-04: 9 command fences tagged; all 26 modules now yield extractable
+  commands (verified: zero modules would report UNVALIDATED on content grounds).
+- `2026-08-25 00:1x` — harness rewritten (unknown ⇒ FAIL, tool preflight, `LAB_VALIDATION:` verdict,
+  non-zero exit). `bash -n` clean.
+- `2026-08-25 00:2x` — test kit staged and served from the Proxmox host at
+  `http://192.168.1.145:8000/` (`dfir-webroot.service`): `validate_lab.sh`,
+  `guest_enable_ssh.ps1`, `guest_run_lab_test.ps1`.
+- `2026-08-25 00:3x` — 15 GB / 27.9 GB.
+- Checked `origin/qa-fixes`: contains **no commits absent from main** — a stale branch, nothing
+  to recover. (Its diff *looks* like mass deletions only because it predates those files.)
+
+### Known risks for the boot step (T3)
+
+- **Windows 0x7B on controller change.** The guest was installed under VMware (LSI SAS / NVMe);
+  `qm importovf` may attach the disk on a controller Windows has no boot driver for. Mitigation:
+  inspect `qm config` after import and re-attach as SATA/IDE if needed.
+- **No guest agent.** It is a VMware guest, so no qemu-guest-agent. First contact must be
+  console (`qm screendump` / `qm sendkey`) until OpenSSH is enabled from inside.
+- **OpenSSH may be unavailable.** `Add-WindowsCapability` needs Windows Update on a stock eval
+  image. If it fails, the whole test must be driven by keystrokes — slow but workable.
+- **CRLF hazard.** Git on Windows warns `LF will be replaced by CRLF` for `validate_lab.sh`. A
+  CRLF shebang breaks the script under Git-Bash. The harness must be delivered to the guest with
+  LF endings (fetch over HTTP, not via a Windows git checkout).
