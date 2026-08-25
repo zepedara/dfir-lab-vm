@@ -3,16 +3,16 @@
 
   Run on the WORK box (PowerShell), then open the resulting .ova in VMware Workstation Pro:
 
-      iwr -useb https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/pull-vm.ps1 | iex
+      iwr -useb https://raw.githubusercontent.com/project-dfir/dfir-vm/main/pull-vm.ps1 | iex
 
   It downloads every split part of the VM from the GitHub Release, reassembles them into a
-  single dfir-lab-vm.ova, and verifies the SHA-256. Resumable: re-run it and it skips parts
+  single .ova, and verifies the SHA-256. Resumable: re-run it and it skips parts
   you already have. No GitHub account/token needed (public release).
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = "zepedara/dfir-lab-vm",
-  [string]$Tag  = "vm-v4",
+  [string]$Repo = "project-dfir/dfir-vm",
+  [string]$Tag  = "vm-v5",
   [string]$Dest = "$env:USERPROFILE\Downloads\dfir-lab-vm",
   [string]$StatusTopic = "dfir-rafa-vmpull"   # public ntfy.sh topic for a best-effort status ping
 )
@@ -36,7 +36,10 @@ try {
   Log "Fetching release $Repo @ $Tag ..."
   $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/tags/$Tag" -Headers $UA
   $parts    = @($rel.assets | Where-Object { $_.name -match '\.part\d{3}$' } | Sort-Object name)
-  $manifest =   $rel.assets | Where-Object { $_.name -eq 'dfir-lab-vm.ova.sha256' } | Select-Object -First 1
+  if (-not $parts -or $parts.Count -eq 0) { throw "No VM parts found in release $Tag of $Repo." }
+  # Derive the assembled filename from the parts so the script is release-agnostic.
+  $ovaName  = ($parts[0].name -replace '\.part\d{3}$', '')
+  $manifest =   $rel.assets | Where-Object { $_.name -eq "$ovaName.sha256" } | Select-Object -First 1
   if (-not $parts -or $parts.Count -eq 0) { throw "No VM parts found in release $Tag of $Repo." }
   $totalGB = [math]::Round((($parts | Measure-Object size -Sum).Sum)/1GB, 2)
   Log ("Found {0} parts, {1} GB total." -f $parts.Count, $totalGB)
@@ -69,7 +72,7 @@ try {
   }
 
   # Reassemble (streamed, low memory)
-  $ova = Join-Path $Dest 'dfir-lab-vm.ova'
+  $ova = Join-Path $Dest $ovaName
   Log "Reassembling -> $ova"
   if (Test-Path $ova) { Remove-Item $ova -Force }
   $outFs = [IO.File]::Open($ova, [IO.FileMode]::Create, [IO.FileAccess]::Write)
@@ -92,10 +95,10 @@ try {
   }
 
   $sizeGB = [math]::Round((Get-Item $ova).Length/1GB, 2)
-  Log "DONE. dfir-lab-vm.ova ready ($sizeGB GB)."
+  Log "DONE. $ovaName ready ($sizeGB GB)."
   Log "Next: open VMware Workstation Pro -> File > Open -> select '$ova' -> Import. Then power it on."
   Log "Lab login: Analyst / dfir.  In the lab repo run e.g.:  cd module-04-scaling-appcompatprocessor ; acp acp.db load data/fleet ; acp acp.db stack FileName"
-  Ping "DONE: dfir-lab-vm.ova reassembled ($sizeGB GB), checksum OK. Import in Workstation Pro."
+  Ping "DONE: $ovaName reassembled ($sizeGB GB), checksum OK. Import in Workstation Pro."
   Write-Host ""
   Write-Host "==================================================================" -ForegroundColor Green
   Write-Host " VM ready: $ova" -ForegroundColor Green

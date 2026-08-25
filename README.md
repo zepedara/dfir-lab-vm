@@ -1,22 +1,56 @@
-# dfir-lab-vm
+# dfir-vm
 
-**One PowerShell line on your Windows host builds a complete DFIR lab VM.**
+**A prebuilt Windows DFIR lab VM — every tool native, no container, no internet needed.**
+
+## Just want the VM? Pull the prebuilt one (recommended)
 
 ```powershell
-iwr https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/bootstrap.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/project-dfir/dfir-vm/main/pull-vm.ps1 | iex
+```
+
+Downloads the split release parts, reassembles `dfir-lab-vm-v5.ova`, verifies the SHA-256,
+then you **File > Open** it in VMware Workstation Pro. Login **`Analyst` / `DFIRlab2026!`**.
+
+### v5 — 2026-08-25
+
+The first release where the **shipped VM and the lab walkthrough demonstrably match**.
+Validation in the image: **26 modules pass, 0 fail, 0 unvalidated, 0 tools missing.**
+
+| Fixed in v5 | Was |
+|---|---|
+| All **26** modules present, lab synced to `dfir-lab@main` | 25 modules, 3 commits behind |
+| **Windows Defender exclusions** for `C:\dfir` | Defender quarantined the lab's own samples *and* student output — it deleted `module-06/data/high.csv`, the file Step 5 tells you to create |
+| **`acp` resolves on PATH** (module 04 runs) | the shim was written to `C:\dfir\Git\usr\bin`, which is not on PATH |
+| **Analyst password never expires** | the documented credentials stopped working 40 days after the v4 build |
+| **module 20 passes** | needs an elevated shell; now documented in the module |
+| Answer key matches the shipped evidence | 6 answer-key claims contradicted the data — see `dfir-lab/TRAINING_VALUE_AUDIT.md` |
+
+Module 20 (live triage with Velociraptor) still requires an **elevated** shell by design —
+right-click the *DFIR Lab Shell* shortcut and *Run as administrator*.
+
+## Or build it yourself from source
+
+```powershell
+iwr https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1 | iex
 ```
 
 Run that in an **elevated PowerShell** on a Windows host that has **VMware Workstation
-Pro**. It uses [HashiCorp Packer](https://www.packer.io/) to build a **Windows 10 +
-WSL2** virtual machine that comes preloaded with the entire **zepedara DFIR lab**:
+Pro**. It uses [HashiCorp Packer](https://www.packer.io/) to build a Windows VM preloaded with:
 
-- the **[dfir-aio](https://github.com/zepedara/dfir-drop)** offline container (in WSL2 Docker),
 - **Eric Zimmerman's tools** (PECmd, EvtxECmd, AppCompatCacheParser, AmcacheParser, MFTECmd, ...),
 - **Chainsaw** + **Hayabusa** (Windows builds) + Sysinternals,
-- the **[dfir-training-lab](https://github.com/zepedara/dfir-training-lab)** walkthrough at `C:\dfir\lab`.
+- Git-Bash, Python 3 + Volatility 3, oletools, the Didier Stevens suite, RegRipper, Sleuth Kit,
+  Zircolite, Velociraptor, tshark, hindsight — all native, all on `PATH`,
+- the **[dfir-lab](https://github.com/project-dfir/dfir-lab)** walkthrough at `C:\dfir\lab`.
 
-Boot the VM and follow the lab natively - using **both** Windows-native tools **and**
-the Linux `dfir-aio:v2` container.
+**The build now gates on the lab actually working.** After provisioning it runs
+`tools/validate_lab.sh` in the guest and **refuses to package** unless every module is
+demonstrably runnable (`LAB_VALIDATION: PASS`). The v4 build had no such gate and shipped
+with two provisioning steps having exited non-zero.
+
+> The `dfir-aio` container path is **retired**. `ghcr.io/zepedara/dfir-aio` no longer exists
+> and the lab is native-first; the container scripts remain in `scripts/` for reference only
+> and are not part of the default build.
 
 > **Legal:** This kit **never redistributes Windows**. The build downloads a free
 > *Microsoft "Windows 10 Enterprise EVALUATION"* ISO straight from Microsoft (or a URL
@@ -110,7 +144,7 @@ $env:DFIR_ISO_URL    = '<fresh Win10 Enterprise eval ISO url>'
 $env:DFIR_ISO_SHA256 = '<sha256 of that ISO>'
 $env:DFIR_VM_DIR     = 'D:\dfir-lab-vm'   # build on a roomier drive
 $env:DFIR_SKIP_BUILD = '1'                # set up + validate, but don't build yet
-iwr https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/bootstrap.ps1 | iex
+iwr https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1 | iex
 ```
 
 Default VM specs (override in the vars file): **4 vCPU / 8 GB RAM / 80 GB disk**.

@@ -3,7 +3,7 @@
 # Installs the analysis toolset (no firewall/remote changes) and clones the lab.
 $ErrorActionPreference = 'Continue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$base  = 'https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/scripts'
+$base  = 'https://raw.githubusercontent.com/project-dfir/dfir-vm/main/scripts'
 $steps = '30-windows-tools','32-native-env','34-native-tools','36-shim','40-clone-lab'
 foreach ($s in $steps) {
     Write-Host ("==== " + (Get-Date -Format o) + "  RUN " + $s + " ====")

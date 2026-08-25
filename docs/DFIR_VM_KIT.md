@@ -1,13 +1,13 @@
 # DFIR VM Kit - build a full DFIR lab VM with one PowerShell line
 
-> Headline deliverable of the zepedara DFIR lab. Repo: **github.com/zepedara/dfir-lab-vm**
+> Headline deliverable of the zepedara DFIR lab. Repo: **github.com/project-dfir/dfir-vm**
 
 ## The one-liner
 
 Run in an **elevated PowerShell** on a Windows host with **VMware Workstation Pro**:
 
 ```powershell
-iwr https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/bootstrap.ps1 | iex
+iwr https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1 | iex
 ```
 
 That's it. ~30-60 minutes later you have a ready-to-use DFIR lab VM.
@@ -135,7 +135,7 @@ bootstrap.ps1  --(checks, installs Packer, clones kit)-->  packer build
 ## What's left to wire / test
 
 - **dfir-aio container publish:** one WIRE-THIS block in `scripts/20-dfir-aio.ps1`
-  (`ghcr.io/zepedara/dfir-aio:v2` + the `zepedara/dfir-drop` release split-parts
+  (`ghcr.io/zepedara/dfir-aio:v2` + the `project-dfir/dfir-drop` release split-parts
   fallback, tag `v2`, prefix `dfir-aio.part.`). The VM builds fully before publish;
   the container loads on first use afterward.
 - **Eval ISO URL** may rotate - override via `$env:DFIR_ISO_URL` / `$env:DFIR_ISO_SHA256`.

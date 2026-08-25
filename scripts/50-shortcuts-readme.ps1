@@ -59,7 +59,7 @@ $html = @'
  .tip{background:#ede7f6;border-left:4px solid #6a1b9a;padding:8px 12px;margin:12px 0}
 </style></head><body>
 <h1>DFIR Training Lab VM</h1>
-<p>This VM was auto-built by <b>zepedara/dfir-lab-vm</b> (Packer). It has everything
+<p>This VM was auto-built by <b>project-dfir/dfir-vm</b> (Packer). It has everything
 you need to run the <b>dfir-training-lab</b> walkthrough natively, using <b>both</b>
 Windows-native DFIR tools <b>and</b> the Linux <code>dfir-aio:v2</code> container in WSL2.</p>
 
