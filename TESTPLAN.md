@@ -24,7 +24,7 @@ hardware virtualization). Run this on the user's box or **l3e7**:
 1. On the Windows host with **VMware Workstation Pro** installed, open an **elevated PowerShell**.
 2. Run the one-liner:
    ```powershell
-   iwr https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/bootstrap.ps1 | iex
+   iwr https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1 | iex
    ```
 3. Expect: prereq checks pass -> Packer installs (if needed) -> ISO downloads ->
    a VMware window drives a hands-free Windows install -> provisioners run ->
@@ -78,7 +78,7 @@ pass/fail gate for the build.
 
 1. **dfir-aio container publish** - `scripts/20-dfir-aio.ps1` has ONE WIRE-THIS block:
    - GHCR ref `ghcr.io/zepedara/dfir-aio:v2` (must be public for the bare pull), and
-   - release fallback `zepedara/dfir-drop` tag `v2`, asset prefix `dfir-aio.part.`.
+   - release fallback `project-dfir/dfir-drop` tag `v2`, asset prefix `dfir-aio.part.`.
    Confirm both once the dfir-drop agent publishes. The VM builds fine before then;
    the container loads on first `dfir-aio` use after publish.
 2. **Eval ISO URL** - Microsoft rotates the link. If the default 404s, pass a fresh
@@ -86,7 +86,7 @@ pass/fail gate for the build.
 3. **Repo visibility** - the bare `iwr | iex` one-liner needs the repo **public**
    (the kit has zero proprietary content). For a private repo, use a token:
    ```powershell
-   $h=@{Authorization="token <PAT>"}; (iwr -Headers $h https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/bootstrap.ps1).Content | iex
+   $h=@{Authorization="token <PAT>"}; (iwr -Headers $h https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1).Content | iex
    ```
 4. **Host hypervisor coexistence** - if the host runs Hyper-V/WSL2/Credential Guard,
    VMware may need recent builds to share VT-x, or disable Hyper-V on the host. The

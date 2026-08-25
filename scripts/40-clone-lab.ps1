@@ -21,7 +21,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     }
 }
 
-$repo = 'https://github.com/zepedara/dfir-training-lab.git'
+$repo = 'https://github.com/project-dfir/dfir-lab.git'
 
 if (Get-Command git -ErrorAction SilentlyContinue) {
     if (Test-Path (Join-Path $LabWin '.git')) {

@@ -12,7 +12,7 @@ $Image       = 'ghcr.io/zepedara/dfir-aio:v2'
 $ImageTagShort = 'dfir-aio:v2'
 # Fallback release: where the split-part .tar.gz assets live. The dfir-drop
 # README says "Download all dfir-aio.part.* files from the latest release".
-$ReleaseOwnerRepo = 'zepedara/dfir-drop'
+$ReleaseOwnerRepo = 'project-dfir/dfir-drop'
 $ReleaseTag       = 'v2'          # <-- confirm the actual release tag once published
 $PartGlob         = 'dfir-aio.part.'   # asset name prefix, per dfir-drop README
 # ---------------------------------------------------------------------------

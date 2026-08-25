@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "release_tag": "deps-v1",
-  "repo": "zepedara/dfir-lab-vm",
-  "base_url": "https://github.com/zepedara/dfir-lab-vm/releases/download/deps-v1",
+  "repo": "project-dfir/dfir-vm",
+  "base_url": "https://github.com/project-dfir/dfir-vm/releases/download/deps-v1",
   "generated": "2026-06-29",
   "note": "Vendored offline dependencies for the DFIR lab VM. ISO is NOT vendored (MS licence). Download any asset tokenless from base_url/<filename>.",
   "assets": {

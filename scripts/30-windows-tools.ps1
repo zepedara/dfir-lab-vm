@@ -7,7 +7,7 @@
 # All land under C:\dfir\tools and get put on the machine PATH.
 #
 # OFFLINE-FIRST: EZ tools / Chainsaw / Hayabusa are pulled from the VENDORED
-# GitHub release  zepedara/dfir-lab-vm @ deps-v1  (so a locked-down / DoD network
+# GitHub release  project-dfir/dfir-vm @ deps-v1  (so a locked-down / DoD network
 # never has to reach hashicorp / ericzimmerman / WithSecureLabs / Yamato-Security).
 # Each tool falls back to its original upstream URL ONLY if the vendored fetch
 # fails. The bits are baked into the image at build time so the built VM is fully
@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # Vendored dependency release (tokenless public assets).
-$DepsBase  = 'https://github.com/zepedara/dfir-lab-vm/releases/download/deps-v1'
+$DepsBase  = 'https://github.com/project-dfir/dfir-vm/releases/download/deps-v1'
 
 $Root      = 'C:\dfir\tools'
 $EZ        = Join-Path $Root 'EZ'

@@ -11,7 +11,7 @@
 .DESCRIPTION
   Headline one-liner (run in an *elevated* PowerShell on your Windows host):
 
-      iwr https://raw.githubusercontent.com/zepedara/dfir-lab-vm/main/bootstrap.ps1 | iex
+      iwr https://raw.githubusercontent.com/project-dfir/dfir-vm/main/bootstrap.ps1 | iex
 
   What I do, in order:
     1. Check prerequisites - VMware Workstation Pro, ~30 GB free disk,

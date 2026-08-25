@@ -134,64 +134,111 @@ source "vmware-iso" "dfir" {
 }
 
 # --------------------------- Build / provisioners ---------------------------
+#
+# 2026-08-25 AUDIT FIX (ISSUE-01 / ISSUE-02).
+#
+# What was wrong: this list ran 00/10/20/30/40/50/55/60 and NOTHING else, so the
+# entire V3 native-first toolchain (Git-Bash, Python3+volatility3, oletools, the
+# Didier Stevens suite, RegRipper + Parse::Win32Registry, Sleuth Kit, every bash
+# shim, and all module 17-22 tooling) was never installed by any build. A fresh
+# build therefore shipped lab CONTENT with no TOOLS - exactly the v2 failure
+# V3_LESSONS.md was written to prevent. The shipped v4 image only worked because
+# a separate A:\provision.ps1 ran the numbered scripts by hand; its transcript
+# (recovered from C:\dfir-provision.log) is the sequence reproduced below.
+#
+# There is also now a real GATE: the build runs tools/validate_lab.sh in the
+# guest and FAILS if any module is not demonstrably runnable. V3_LESSONS §8 asked
+# for this and it was never wired up; the v4 build packaged with TWO provisioning
+# steps having exited 1.
+#
+# The container path (00-wsl2 / 10-docker / 20-dfir-aio) is deliberately NOT in
+# the default build: ghcr.io/zepedara/dfir-aio is 404 and the lab is native-first.
 
 build {
   name    = "dfir-lab-vm"
   sources = ["source.vmware-iso.dfir"]
 
-  # 1. Enable WSL2 features (needs a reboot afterwards).
-  provisioner "powershell" {
-    script = "../scripts/00-wsl2.ps1"
-  }
-  provisioner "windows-restart" {
-    restart_timeout = "20m"
-  }
-
-  # 2. Install Docker (docker engine inside the WSL2 Ubuntu distro).
-  provisioner "powershell" {
-    script = "../scripts/10-docker.ps1"
-  }
-
-  # 3. Load the dfir-aio container (GHCR pull, with split-parts release fallback).
-  provisioner "powershell" {
-    script            = "../scripts/20-dfir-aio.ps1"
-    elevated_user     = var.winrm_username
-    elevated_password = var.winrm_password
-  }
-
-  # 4. Install Windows-native DFIR tools (EZ Tools, Chainsaw, Hayabusa).
+  # 1. Windows-native DFIR tools: EZ Tools, Chainsaw, Hayabusa, Sysinternals.
   provisioner "powershell" {
     script = "../scripts/30-windows-tools.ps1"
   }
 
-  # 5. Clone the dfir-training-lab to C:\dfir\lab.
+  # 2. Native environment: Git-for-Windows (bash + coreutils + perl), Python 3.
+  provisioner "powershell" {
+    script = "../scripts/32-native-env.ps1"
+  }
+
+  # 3. The former-container tool set, installed natively (volatility3, oletools,
+  #    Didier Stevens, Sleuth Kit, RegRipper, YARA, prefetch shim).
+  provisioner "powershell" {
+    script = "../scripts/34-native-tools.ps1"
+  }
+
+  # 4. The remaining native forensic tools + the canonical /opt/chainsaw path.
+  provisioner "powershell" {
+    script = "../scripts/35-native-forensic-tools.ps1"
+  }
+
+  # 5. Bash shims so every tool resolves by bare name in Git-Bash.
+  provisioner "powershell" {
+    script = "../scripts/36-shim.ps1"
+  }
+
+  # 6. Addon-module tooling (modules 17-22): Velociraptor, Zircolite, WxTCmd,
+  #    hindsight, tshark, evtx_dump.
+  provisioner "powershell" {
+    script = "../scripts/36-addon-tools.ps1"
+  }
+
+  # 7. Clone the lab and bake in every module's data.
   provisioner "powershell" {
     script = "../scripts/40-clone-lab.ps1"
   }
 
-  # 6. Aliases, shortcuts, desktop README - make the walkthrough "just work".
+  # 8. Aliases, shortcuts, desktop README.
   provisioner "powershell" {
     script = "../scripts/50-shortcuts-readme.ps1"
   }
 
-  # 6a. Content growth paths: dfir-update (online) + dfir-import (offline pack).
+  # 9. Content growth paths: dfir-update (online) + dfir-import (offline pack).
   provisioner "powershell" {
     script = "../scripts/55-content-update.ps1"
   }
 
-  # 6b. AIR-GAP verification + install the runtime offline self-test in the VM.
+  # 10. v5 fixes: Defender exclusions for the lab tree, the acp shim on PATH,
+  #     non-expiring Analyst credentials, lab synced to main. Elevated.
   provisioner "powershell" {
-    script            = "../scripts/60-verify-offline.ps1"
+    script            = "../scripts/45-v5-fixes.ps1"
     elevated_user     = var.winrm_username
     elevated_password = var.winrm_password
   }
 
-  # 7. Final tidy: clear temp, leave a build manifest.
+  # 11. THE GATE. Upload the harness and refuse to package unless every module is
+  #     demonstrably runnable. `validate_lab.sh` exits non-zero on any FAIL and on
+  #     any module it cannot validate, so a silently-skipped module fails the build.
+  provisioner "file" {
+    source      = "../tools/validate_lab.sh"
+    destination = "C:/dfir/validate_lab.sh"
+  }
+  provisioner "powershell" {
+    elevated_user     = var.winrm_username
+    elevated_password = var.winrm_password
+    inline = [
+      "Write-Host '[gate] running the lab validation harness...'",
+      "& 'C:\\dfir\\tools\\git\\bin\\bash.exe' -lc 'bash /c/dfir/validate_lab.sh /c/dfir/lab' | Tee-Object -FilePath C:\\dfir\\validation.log",
+      "$verdict = Select-String -Path C:\\dfir\\validation.log -Pattern '^LAB_VALIDATION:' | Select-Object -Last 1",
+      "Write-Host \"[gate] $verdict\"",
+      "if ($verdict -notmatch 'LAB_VALIDATION: PASS') { throw '[gate] REFUSING TO PACKAGE - the lab is not demonstrably runnable. See C:\\dfir\\validation.log' }",
+      "Write-Host '[gate] PASS - packaging allowed.'"
+    ]
+  }
+
+  # 12. Final tidy + build manifest.
   provisioner "powershell" {
     inline = [
       "Write-Host '[final] DFIR lab provisioning complete.'",
       "$null = New-Item -ItemType Directory -Force -Path C:\\dfir",
-      "Set-Content -Path C:\\dfir\\BUILD-INFO.txt -Value \"DFIR Lab VM built $(Get-Date -Format o) by Packer (zepedara/dfir-lab-vm)\""
+      "Set-Content -Path C:\\dfir\\BUILD-INFO.txt -Value \"DFIR Lab VM built $(Get-Date -Format o) by Packer (project-dfir/dfir-vm)\""
     ]
   }
 }

@@ -60,7 +60,7 @@ $lab = 'C:\dfir\lab'
 if (Test-Path (Join-Path $lab '.git')) {
     Write-Host "[lab] git pull..."; git -C $lab pull --ff-only
 } else {
-    git clone --depth 1 https://github.com/zepedara/dfir-training-lab.git $lab
+    git clone --depth 1 https://github.com/project-dfir/dfir-lab.git $lab
 }
 # Run any new/updated per-module data fetchers + LFS, inside WSL.
 Write-Host "[lab] baking any new module data (get-data.sh / LFS)..."
