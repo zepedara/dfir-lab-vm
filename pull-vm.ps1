@@ -20,6 +20,15 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $UA = @{ 'User-Agent' = 'dfir-pull' }
 
+# Release assets come back as application/octet-stream, so -UseBasicParsing gives
+# us .Content as a byte[]. Decode before parsing or a hash compares against "100"
+# (the decimal value of the first byte).
+function Get-TextContent($resp) {
+  if ($resp.Content -is [byte[]]) { return [Text.Encoding]::UTF8.GetString($resp.Content) }
+  return [string]$resp.Content
+}
+
+
 New-Item -ItemType Directory -Force $Dest | Out-Null
 $logPath = Join-Path $Dest 'pull-vm.log'
 function Log($m){
@@ -86,7 +95,7 @@ try {
   # Verify
   if ($manifest) {
     Log "Verifying SHA-256..."
-    $expected = ((Invoke-WebRequest -Uri $manifest.browser_download_url -Headers $UA -UseBasicParsing).Content -split '\s+')[0].Trim()
+    $expected = ((Get-TextContent (Invoke-WebRequest -Uri $manifest.browser_download_url -Headers $UA -UseBasicParsing)) -split '\s+')[0].Trim()
     $actual   = (Get-FileHash $ova -Algorithm SHA256).Hash
     if ($actual -ieq $expected) { Log "SHA-256 OK ($actual)" }
     else { throw "SHA-256 MISMATCH`n expected: $expected`n actual:   $actual`n Re-run to repair the bad part(s)." }

@@ -17,6 +17,15 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $UA = @{ 'User-Agent' = 'dfir-repair' }
 
+# Release assets come back as application/octet-stream, so -UseBasicParsing gives
+# us .Content as a byte[]. Decode before parsing or a hash compares against "100"
+# (the decimal value of the first byte).
+function Get-TextContent($resp) {
+  if ($resp.Content -is [byte[]]) { return [Text.Encoding]::UTF8.GetString($resp.Content) }
+  return [string]$resp.Content
+}
+
+
 Write-Host "== reading release $Repo @ $Tag ==" -ForegroundColor Cyan
 $rel   = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/tags/$Tag" -Headers $UA
 $parts = @($rel.assets | Where-Object { $_.name -match '\.part\d{3}$' } | Sort-Object name)
@@ -32,7 +41,7 @@ Write-Host "   target: $ovaName"
 $finalsha = $null
 $manifest = $rel.assets | Where-Object { $_.name -eq "$ovaName.sha256" } | Select-Object -First 1
 if ($manifest) {
-  $finalsha = ((Invoke-WebRequest -Uri $manifest.browser_download_url -Headers $UA -UseBasicParsing).Content -split '\s+')[0].Trim().ToUpper()
+  $finalsha = ((Get-TextContent (Invoke-WebRequest -Uri $manifest.browser_download_url -Headers $UA -UseBasicParsing)) -split '\s+')[0].Trim().ToUpper()
   Write-Host "   expected sha256: $finalsha"
 } else {
   Write-Host "   WARNING: no $ovaName.sha256 in the release; final verification will be skipped." -ForegroundColor Yellow
@@ -43,7 +52,7 @@ if ($manifest) {
 $want = @{}
 $pm = $rel.assets | Where-Object { $_.name -eq 'parts.sha256' } | Select-Object -First 1
 if ($pm) {
-  ((Invoke-WebRequest -Uri $pm.browser_download_url -Headers $UA -UseBasicParsing).Content -split "`n") | ForEach-Object {
+  ((Get-TextContent (Invoke-WebRequest -Uri $pm.browser_download_url -Headers $UA -UseBasicParsing)) -split "`n") | ForEach-Object {
     if ($_ -match '^([0-9A-Fa-f]{64})\s+\*?(\S+)') { $want[$matches[2].Trim()] = $matches[1].ToUpper() }
   }
   Write-Host ("   per-part checksums: {0} entries from the release" -f $want.Count)
