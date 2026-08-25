@@ -63,7 +63,7 @@ try {
     } else {
       $ok = $false
       for ($r = 1; $r -le 6 -and -not $ok; $r++) {
-        try { Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp -Headers $UA; $ok = $true }
+        try { Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp -Headers $UA -UseBasicParsing; $ok = $true }
         catch { Log ("    retry {0}/6 for {1}: {2}" -f $r, $a.name, $_.Exception.Message); Start-Sleep -Seconds ($r*3) }
       }
       if (-not $ok) { throw "download failed for $($a.name) after retries" }
@@ -86,7 +86,7 @@ try {
   # Verify
   if ($manifest) {
     Log "Verifying SHA-256..."
-    $expected = ((Invoke-WebRequest -Uri $manifest.browser_download_url -Headers $UA).Content -split '\s+')[0].Trim()
+    $expected = ((Invoke-WebRequest -Uri $manifest.browser_download_url -Headers $UA -UseBasicParsing).Content -split '\s+')[0].Trim()
     $actual   = (Get-FileHash $ova -Algorithm SHA256).Hash
     if ($actual -ieq $expected) { Log "SHA-256 OK ($actual)" }
     else { throw "SHA-256 MISMATCH`n expected: $expected`n actual:   $actual`n Re-run to repair the bad part(s)." }
