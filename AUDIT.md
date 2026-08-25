@@ -12,19 +12,28 @@
 
 ## 1. Verdict
 
-**Not ready to ship a fresh build. The shipped v4 OVA is testable and is what we are testing.**
-
-Two different things must not be confused:
+**RESOLVED — `vm-v5` shipped 2026-08-25.** All P0/P1 issues below are fixed. The release is
+the first where the shipped VM and the lab walkthrough demonstrably match:
+**26 modules pass, 0 fail, 0 unvalidated, 0 tools missing** (`LAB_VALIDATION: PASS`), measured
+inside the image before export.
 
 | Thing | State |
 |---|---|
-| **The shipped artifact** (`vm-v4` OVA, 27.9 GB, 15 parts, 2026-07-16) | Exists, downloadable. Being tested now. Content = **24 modules**. |
-| **A fresh `packer build` from this repo today** | **Would reproduce the v2 failure.** The entire V3 native-first toolchain is orphaned — see ISSUE-01. |
+| **`vm-v5`** (29.06 GB OVA, 15 parts, 2026-08-25) | **Current.** 26 modules, lab at `dfir-lab@52b9d4a`, validated 26/0. |
+| `vm-v4` (27.9 GB, 2026-07-16) | Superseded. 25 modules, one silently skipped by every validator; expired credentials; Defender ate the lab's own output. |
+| **A fresh `packer build` from this repo today** | **Fixed.** The full native toolchain is provisioned again (ISSUE-01) and the build **refuses to package** unless the harness passes (ISSUE-02). |
 
-The single most important finding: **the repo's automated build does not build the VM that
-was shipped.** The v4 OVA was brought to a working state by *manual, in-guest* script runs.
-That state is not reproducible from `packer build`. If we rebuild for the 26-module content,
-we rebuild the broken v2 architecture unless ISSUE-01 is fixed first.
+The finding that mattered most: **the repo's automated build did not build the VM that was
+shipped.** Recovered proof — `C:\dfir-provision.log` inside the v4 image shows it was driven by
+`A:\provision.ps1` running `30 → 32 → 34 → 36-shim → 40-clone-lab → 42-module04-acp`, with
+**two of those steps exiting 1** and the image packaged anyway. Both halves are now closed: the
+packer provisioner list reproduces that sequence, and a gate makes a non-passing lab fail the
+build instead of shipping.
+
+> **Provenance of v5, stated plainly.** The v5 image was produced by exporting the *validated*
+> VM (Proxmox → streamOptimized VMDK → OVA), not by a clean `packer build`, because the fleet
+> has no VMware Workstation host — Broadcom now gates that download behind an account. Every
+> fix is committed as `scripts/45-v5-fixes.ps1` so a future clean bake reproduces the content.
 
 ---
 
